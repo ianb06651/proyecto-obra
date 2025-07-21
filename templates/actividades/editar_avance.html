@@ -1,0 +1,27 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Editar Avance</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    <h1>Editar Avance del {{ avance.fecha_reporte }}</h1>
+    <h2>Actividad: {{ avance.actividad.nombre_actividad }}</h2>
+
+    <form method="post">
+        {% csrf_token %}
+        <p>
+            <label for="id_fecha">Fecha de Registro:</label><br>
+            <input type="date" name="fecha_reporte" id="id_fecha" value="{{ avance.fecha_reporte|date:'Y-m-d' }}" required>
+        </p>
+        <p>
+            <label for="id_cantidad">Avance Real del Día:</label><br>
+            <input type="number" step="0.01" name="cantidad_realizada" id="id_cantidad" value="{{ avance.cantidad_realizada_dia }}" required>
+        </p>
+        <button type="submit">Guardar Cambios</button>
+        <a href="{% url 'lista_avances' %}" class="button-link" style="background-color: #6c757d;">Cancelar</a>
+    </form>
+</body>
+</html>

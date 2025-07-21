@@ -1,0 +1,108 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Lista de Avances Diarios</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    <h1>Historial de Avances Diarios</h1>
+
+    <div class="summary-container">
+    <div class="summary-box">
+        <h4>Avance Real</h4>
+        <p class="summary-value">
+            {{ total_real_acumulado|floatformat:2 }}
+            {% if unidad_filtrada %}<span>{{ unidad_filtrada }}</span>{% endif %}
+        </p>
+        <small>(EV - Valor Ganado)</small>
+    </div>
+    <div class="summary-box">
+        <h4>Avance Programado</h4>
+        <p class="summary-value">
+            {{ total_programado_acumulado|floatformat:2 }}
+            {% if unidad_filtrada %}<span>{{ unidad_filtrada }}</span>{% endif %}
+        </p>
+        <small>(PV-Valor Real)</small>
+    </div>
+
+    <div class="summary-box">
+        <h4>Rendimiento</h4>
+        <p class="summary-value">
+            {{ rendimiento|floatformat:2 }}<span>%</span>
+        </p>
+        <small>(SPI-Rendimiento)</small>
+    </div>
+</div>
+
+    <form method="get" style="margin-bottom: 20px; display: flex; gap: 20px; align-items: flex-end;">
+        <div>
+            <label for="id_semana">Filtrar por Semana:</label>
+            <select name="semana_filtro" id="id_semana" onchange="this.form.submit()">
+                <option value="">-- Todas las Semanas --</option>
+                {% for s in semanas %}
+                    <option value="{{ s.pk }}" {% if semana_seleccionada_id == s.pk|stringformat:"s" %}selected{% endif %}>
+                        Semana {{ s.numero_semana }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="id_actividad">Filtrar por Actividad:</label>
+            <select name="actividad_filtro" id="id_actividad" onchange="this.form.submit()">
+                <option value="">-- Todas las Actividades --</option>
+                {% for act in todas_las_actividades %}
+                    <option value="{{ act.pk }}" {% if actividad_seleccionada_id == act.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ act.nombre_actividad }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <a href="{% url 'registrar_avance' %}" class="button-link">Registrar Nuevo Avance</a>
+    <hr>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Partida (WBS)</th>
+                <th>Actividad (WBS)</th>
+                <th>Avance Programado (PV)</th>
+                <th>Avance Real (EV)</th>
+                <th>Unidad</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for avance in avances %}
+                <tr>
+                    <td>{{ avance.fecha_reporte }}</td>
+                    <td>{{ avance.actividad.partida.nombre }}</td>
+                    <td>{{ avance.actividad.nombre_actividad }}</td>
+                    
+                    <td>
+                        {% if avance.fecha_reporte > avance.actividad.fecha_fin_programada %}
+                            <span style="color: green; font-weight: bold;">Terminado</span>
+                        {% else %}
+                            {{ avance.cantidad_programada_dia }}
+                        {% endif %}
+                    </td>
+                    <td>{{ avance.cantidad_realizada_dia }}</td>
+                    <td>{{ avance.actividad.unidad_medida }}</td>
+                    <td>
+                        <a href="{% url 'editar_avance' avance.pk %}">Editar</a> |
+                        <a href="{% url 'borrar_avance' avance.pk %}" style="color: red;">Borrar</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align: center;">No hay registros de avance para el filtro seleccionado.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

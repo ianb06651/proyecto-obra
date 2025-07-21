@@ -1,0 +1,64 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrar Avance Diario</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <li class="{{ message.tags }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <h1>Registrar Avance Diario</h1>
+
+    <form method="get">
+        <h3>1. Filtra por Partida</h3>
+        <label for="id_partida">Selecciona la Partida:</label><br>
+        <select name="partida_filtro" id="id_partida" onchange="this.form.submit()">
+            <option value="">-- Selecciona una Partida --</option>
+            {% for p in partidas %}
+                <option value="{{ p.pk }}" {% if partida_seleccionada_id == p.pk|stringformat:"s" %}selected{% endif %}>
+                    {{ p.nombre }}
+                </option>
+            {% endfor %}
+        </select>
+    </form>
+    <hr>
+
+    {% if actividades %}
+        <h3>2. Registra el Avance</h3>
+        <form method="post">
+            {% csrf_token %}
+            <p>
+                <label for="id_actividad">Selecciona la Actividad:</label><br>
+                <select name="actividad" id="id_actividad" required>
+                    <option value="">---------</option>
+                    {% for act in actividades %}
+                        <option value="{{ act.pk }}">{{ act.nombre_actividad }}</option>
+                    {% endfor %}
+                </select>
+            </p>
+            <p>
+                <label for="id_fecha">Fecha de Registro:</label><br>
+                <input type="date" name="fecha_reporte" id="id_fecha" required>
+            </p>
+            <p>
+                <label for="id_cantidad">Avance Real del Día:</label><br>
+                <input type="number" step="0.01" name="cantidad_realizada" id="id_cantidad" required>
+            </p>
+            <button type="submit">Enviar</button>
+        </form>
+    {% elif partida_seleccionada_id %}
+        <p>No hay actividades para la partida seleccionada.</p>
+    {% endif %}
+    
+    <hr>
+    <a href="{% url 'lista_avances' %}" class="button-link">Ver Historial de Avances</a>
+</body>
+</html>
