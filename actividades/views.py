@@ -130,8 +130,10 @@ def borrar_avance(request, pk):
     return render(request, 'actividades/confirmar_borrado.html', contexto)
 
 def registrar_reporte_maquinaria(request):
+    print("--- 1. VISTA INICIADA ---")
     # Si el usuario está enviando el formulario (método POST)
     if request.method == 'POST':
+        print("--- 2. PROCESANDO POST ---")
         # Creamos una instancia del formulario con los datos enviados
         form = ReporteMaquinariaForm(request.POST)
         
@@ -146,9 +148,11 @@ def registrar_reporte_maquinaria(request):
     
     # Si es la primera vez que se carga la página (método GET)
     else:
+        print("--- 2. CREANDO FORMULARIO VACÍO (GET) ---")
         # Creamos un formulario vacío
         form = ReporteMaquinariaForm()
-
+    
+    print("--- 3. A PUNTO DE RENDERIZAR PLANTILLA ---")
     # Renderizamos la plantilla HTML, pasándole el formulario
     return render(request, 'actividades/reporte_maquinaria_form.html', {
         'form': form,
