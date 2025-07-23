@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Fecha Inválida{% endblock %}
+
+{% block content %}
+<div class="card text-center w-50 mx-auto border-danger">
+    <div class="card-header bg-danger text-white">
+        <h1>¡Ups! Fecha Inválida</h1>
+    </div>
+    <div class="card-body">
+        <p class="fs-5">No puedes hacer registros para una fecha futura.</p>
+        <p>Por favor, selecciona el día de hoy o una fecha anterior.</p>
+        
+        <div class="mt-4">
+            <a href="javascript:history.back()" class="btn btn-primary">Volver e Intentar de Nuevo</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
