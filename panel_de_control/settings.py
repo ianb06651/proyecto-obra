@@ -6,7 +6,7 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Lee la SECRET_KEY de una variable de entorno.
-SECRET_KEY = os.environ.get('SECRET_KEY')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-una-clave-local-cualquiera')
 
 # Detecta si estamos en Render para poner DEBUG = False
 IS_RENDER = os.environ.get('RENDER') == 'true'

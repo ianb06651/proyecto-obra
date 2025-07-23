@@ -1,5 +1,5 @@
 from django import forms
-from .models import ReporteDiarioMaquinaria
+from .models import ReporteDiarioMaquinaria, ReportePersonal
 
 class ReporteMaquinariaForm(forms.ModelForm):
     class Meta:
@@ -19,6 +19,21 @@ class ReporteMaquinariaForm(forms.ModelForm):
             'fecha': forms.DateInput(
                 attrs={'type': 'date', 'class': 'form-control'}
             ),
+        }
+
+class ReportePersonalForm(forms.ModelForm):
+    class Meta:
+        model = ReportePersonal
+        fields = [
+            'fecha',
+            'empresa',
+            'cargo',
+            'partida',
+            'area_de_trabajo',
+            'cantidad',
+        ]
+        widgets = {
+            'fecha': forms.DateInput(attrs={'type': 'date'}),
         }
 
     def __init__(self, *args, **kwargs):

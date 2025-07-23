@@ -1,19 +1,20 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Confirmar Borrado</title>
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
-</head>
-<body>
-    <h1>¿Estás seguro?</h1>
-    <p>Estás a punto de eliminar permanentemente el registro de avance para la actividad <strong>{{ avance.actividad.nombre_actividad }}</strong> del día <strong>{{ avance.fecha_reporte }}</strong>.</p>
-    
-    <form method="post">
-        {% csrf_token %}
-        <button type="submit" style="background-color: #dc3545;">Sí, eliminar</button>
-        <a href="{% url 'lista_avances' %}" class="button-link" style="background-color: #6c757d;">Cancelar</a>
-    </form>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Confirmar Borrado{% endblock %}
+
+{% block content %}
+<div class="card text-center w-50 mx-auto">
+    <div class="card-header">
+        <h1>¿Estás seguro?</h1>
+    </div>
+    <div class="card-body">
+        <p>Estás a punto de eliminar permanentemente el registro de avance para la actividad <strong>{{ avance.actividad.nombre_actividad }}</strong> del día <strong>{{ avance.fecha_reporte }}</strong>.</p>
+        
+        <form method="post" class="mt-4">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Sí, eliminar</button>
+            <a href="{% url 'lista_avances' %}" class="btn btn-secondary">Cancelar</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

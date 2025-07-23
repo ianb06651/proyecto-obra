@@ -5,7 +5,7 @@ from django.db.models import Sum, F
 from datetime import date
 from .models import Actividad, AvanceDiario, Semana, PartidaActividad, ReportePersonal, Empresa, Cargo, AreaDeTrabajo,ReporteDiarioMaquinaria
 from .utils import calcular_avance_diario
-from .forms import ReporteMaquinariaForm
+from .forms import ReporteMaquinariaForm, ReportePersonalForm
 
 # --- Función de Ayuda para Seguridad ---
 def es_staff(user):
@@ -55,7 +55,7 @@ def registrar_avance(request):
 
 
 def lista_avances(request):
-    # --- LÓGICA DE FILTROS (sin cambios) ---
+    # --- LÓGICA DE FILTROS ---
     semanas = Semana.objects.all()
     todas_las_actividades = Actividad.objects.all()
     semana_seleccionada_id = request.GET.get('semana_filtro')
@@ -76,27 +76,41 @@ def lista_avances(request):
             unidad_filtrada = Actividad.objects.get(pk=actividad_seleccionada_id).unidad_medida
         except Actividad.DoesNotExist: pass
 
-    # --- CÁLCULO DE TOTALES (sin cambios) ---
-    total_real = avances.aggregate(total=Sum('cantidad_realizada_dia'))['total'] or 0
-    avances_para_programado = avances.filter(fecha_reporte__lte=F('actividad__fecha_fin_programada'))
-    total_programado_a_la_fecha = avances_para_programado.filter(fecha_reporte__lte=date.today()).aggregate(total=Sum('cantidad_programada_dia'))['total'] or 0
+# --- NUEVA LÓGICA DE CÁLCULOS AVANZADOS ---
 
-    # --- NUEVO: CÁLCULO DEL RENDIMIENTO ---
+    # 1. Total Real: Suma de todo lo ejecutado en el rango filtrado.
+    total_real = avances.aggregate(total=Sum('cantidad_realizada_dia'))['total'] or 0
+
+    # 2. Total Programado para mostrar en la TARJETA:
+    #    Suma solo los avances cuya fecha es ANTERIOR o IGUAL a la fecha de fin programada de su actividad.
+    #    Esto excluye los días que aparecen como "Terminado".
+    total_programado_para_mostrar = avances.filter(
+        fecha_reporte__lte=F('actividad__fecha_fin_programada')
+    ).aggregate(total=Sum('cantidad_programada_dia'))['total'] or 0
+
+    # 3. Total Programado para el CÁLCULO del SPI:
+    #    Suma todo lo que debería haberse programado hasta el día de HOY.
+    #    Esto es necesario para un SPI correcto y realista.
+    total_programado_para_spi = avances.filter(
+        fecha_reporte__lte=date.today()
+    ).aggregate(total=Sum('cantidad_programada_dia'))['total'] or 0
+    
+    # 4. Cálculo del Rendimiento (SPI)
+    #    Usa el total_programado_para_spi para ser preciso.
     rendimiento = 0
-    if total_programado_a_la_fecha > 0:
-        rendimiento = (total_real / total_programado_a_la_fecha) * 100
-    # ------------------------------------
+    if total_programado_para_spi > 0:
+        rendimiento = (total_real / total_programado_para_spi) * 100
 
     contexto = {
-        'avances': avances,
+        'avances': avances.order_by('-fecha_reporte'),
         'semanas': semanas,
         'todas_las_actividades': todas_las_actividades,
         'semana_seleccionada_id': semana_seleccionada_id,
         'actividad_seleccionada_id': actividad_seleccionada_id,
         'total_real_acumulado': total_real,
-        'total_programado_acumulado': total_programado_a_la_fecha,
+        'total_programado_acumulado': total_programado_para_mostrar, # <-- Usamos el valor para mostrar
         'unidad_filtrada': unidad_filtrada,
-        'rendimiento': rendimiento, # Añadimos el rendimiento al contexto
+        'rendimiento': rendimiento,
     }
     
     return render(request, 'actividades/lista_avances.html', contexto)
@@ -131,30 +145,41 @@ def borrar_avance(request, pk):
 
 def registrar_reporte_maquinaria(request):
     print("--- 1. VISTA INICIADA ---")
-    # Si el usuario está enviando el formulario (método POST)
     if request.method == 'POST':
         print("--- 2. PROCESANDO POST ---")
-        # Creamos una instancia del formulario con los datos enviados
         form = ReporteMaquinariaForm(request.POST)
-        
-        # Verificamos si los datos son válidos
         if form.is_valid():
-            # Guardamos el nuevo reporte en la base de datos
             form.save() 
-            # Añadimos un mensaje de éxito (opcional pero recomendado)
             messages.success(request, '¡Reporte de maquinaria guardado exitosamente!')
-            # Redirigimos al mismo formulario para que puedan cargar otro
             return redirect('registrar_reporte_maquinaria')
-    
-    # Si es la primera vez que se carga la página (método GET)
     else:
         print("--- 2. CREANDO FORMULARIO VACÍO (GET) ---")
-        # Creamos un formulario vacío
         form = ReporteMaquinariaForm()
     
     print("--- 3. A PUNTO DE RENDERIZAR PLANTILLA ---")
-    # Renderizamos la plantilla HTML, pasándole el formulario
     return render(request, 'actividades/reporte_maquinaria_form.html', {
         'form': form,
         'titulo': "Registrar Nuevo Reporte de Maquinaria"
     })
+
+def pagina_principal(request):
+    """
+    Vista para la página principal/dashboard.
+    """
+    return render(request, 'actividades/principal.html')
+
+def registrar_reporte_personal(request):
+    if request.method == 'POST':
+        form = ReportePersonalForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, '¡Reporte de personal guardado exitosamente!')
+            return redirect('registrar_reporte_personal')
+    else:
+        form = ReportePersonalForm()
+    
+    contexto = {
+        'form': form,
+        'titulo': "Registrar Reporte de Personal"
+    }
+    return render(request, 'actividades/reporte_personal_form.html', contexto)
