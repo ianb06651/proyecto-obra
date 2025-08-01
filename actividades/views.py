@@ -8,6 +8,8 @@ from .utils import calcular_avance_diario
 from .forms import ReporteMaquinariaForm, ReportePersonalForm
 from django.db import IntegrityError
 from datetime import date, datetime
+from .forms import ConsultaClimaForm
+from .services import obtener_y_guardar_clima
 
 
 
@@ -245,3 +247,19 @@ def registrar_reporte_personal(request):
         'titulo': "Registrar Reporte de Personal"
     }
     return render(request, 'actividades/reporte_personal_form.html', contexto)
+
+def vista_clima(request):
+    reporte = None
+    if request.method == 'POST':
+        form = ConsultaClimaForm(request.POST)
+        if form.is_valid():
+            fecha_seleccionada = form.cleaned_data['fecha']
+            reporte = obtener_y_guardar_clima(fecha_seleccionada)
+    else:
+        form = ConsultaClimaForm()
+        
+    contexto = {
+        'form': form,
+        'reporte': reporte
+    }
+    return render(request, 'actividades/vista_clima.html', contexto)

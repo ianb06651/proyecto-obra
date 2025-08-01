@@ -120,3 +120,22 @@ class ReporteDiarioMaquinaria(models.Model):
             raise ValidationError(
                 "La suma de la cantidad activa e inactiva debe ser igual a la cantidad total."
             )
+            
+class ReporteClima(models.Model):
+    fecha = models.DateField(unique=True, primary_key=True)
+    temp_max_c = models.FloatField(help_text="Temperatura máxima en °C")
+    temp_min_c = models.FloatField(help_text="Temperatura mínima en °C")
+    sensacion_max_c = models.FloatField(help_text="Sensación térmica máxima en °C (horario laboral)")
+    precipitacion_total_mm = models.FloatField(help_text="Precipitación total del día en mm")
+    precipitacion_laboral_mm = models.FloatField(help_text="Precipitación en horario laboral (8am-6pm) en mm")
+    precipitacion_no_laboral_mm = models.FloatField(help_text="Precipitación fuera de horario laboral en mm")
+    condicion_texto = models.CharField(max_length=100, help_text="Descripción del clima (ej. Neblina)")
+    condicion_icono = models.URLField(help_text="URL del ícono del clima")
+
+    class Meta:
+        verbose_name = "Reporte de Clima"
+        verbose_name_plural = "Reportes de Clima"
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"Clima del {self.fecha}"

@@ -5,6 +5,13 @@ import sys
 
 
 def main():
+    try:
+       from dotenv import load_dotenv
+    except ImportError:
+       pass # No es necesario en producción si las variables ya están configuradas
+    else:
+       load_dotenv()
+       
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'panel_de_control.settings')
     try:

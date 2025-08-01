@@ -13,4 +13,5 @@ urlpatterns = [
      path('maquinaria/reporte/nuevo/', registrar_reporte_maquinaria, name='registrar_reporte_maquinaria'),
      path('personal/reporte/nuevo/', views.registrar_reporte_personal, name='registrar_reporte_personal'),
      path('maquinaria/reporte/editar/<int:pk>/', views.editar_reporte_maquinaria, name='editar_reporte_maquinaria'),
+     path('clima/', views.vista_clima, name='vista_clima'),
 ]

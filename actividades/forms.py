@@ -40,3 +40,10 @@ class ReportePersonalForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field in self.fields:
             self.fields[field].widget.attrs.update({'class': 'form-control'})
+            
+class ConsultaClimaForm(forms.Form):
+    fecha = forms.DateField(
+        label="Selecciona una fecha",
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        required=True
+    )

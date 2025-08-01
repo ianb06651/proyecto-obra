@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Consulta Climatológica{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">Consulta Climatológica</h1>
+    
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Consultar Clima de un Día Específico</h5>
+            <form method="post">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <button type="submit" class="btn btn-primary">Consultar</button>
+            </form>
+        </div>
+    </div>
+
+    {% if reporte %}
+    <div class="card">
+        <div class="card-header fs-4">
+            Resultados para el {{ reporte.fecha|date:"d \d\e F \d\e Y" }}
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <h4>Resumen del Día</h4>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item"><strong>Temperatura Máx/Mín:</strong> {{ reporte.temp_max_c }}°C / {{ reporte.temp_min_c }}°C</li>
+                        <li class="list-group-item"><strong>Sensación Térmica Máx (Laboral):</strong> {{ reporte.sensacion_max_c }}°C</li>
+                        <li class="list-group-item"><strong>Precipitación Total:</strong> {{ reporte.precipitacion_total_mm }} mm</li>
+                        <li class="list-group-item text-primary"><strong>Lluvia en Horario Laboral (8am-6pm):</strong> {{ reporte.precipitacion_laboral_mm|floatformat:2 }} mm</li>
+                        <li class="list-group-item text-secondary"><strong>Lluvia fuera de Horario Laboral:</strong> {{ reporte.precipitacion_no_laboral_mm|floatformat:2 }} mm</li>
+                    </ul>
+                </div>
+                <div class="col-md-4 text-center">
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+{% endblock %}

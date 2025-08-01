@@ -98,3 +98,6 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = '/admin/login/' # Ruta de login por defecto de Django
+
+# Clave para el API del clima. Se lee del entorno.
+WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY')
