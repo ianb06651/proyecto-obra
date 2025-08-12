@@ -1,7 +1,6 @@
 from django.db import models
-from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 
 # --- CATÁLOGOS ---
@@ -26,14 +25,7 @@ class Semana(models.Model):
         verbose_name_plural = "Semanas"
         ordering = ['numero_semana']
     def __str__(self): return f"Semana {self.numero_semana}"
-    
-class Proyecto(models.Model):
-    nombre = models.CharField(_("Nombre del Proyecto"), max_length=255, unique=True)
-    fecha_inicio = models.DateField(_("Fecha de Inicio"))
-    fecha_fin_estimada = models.DateField(_("Fecha de Finalización Estimada"))
-    def __str__(self): return self.nombre
 
-# --- TABLAS SEPARADAS PARA PARTIDAS ---
 class PartidaActividad(models.Model):
     nombre = models.CharField(max_length=255, unique=True)
     class Meta: verbose_name_plural = "Partidas de Actividades"
@@ -44,9 +36,25 @@ class PartidaPersonal(models.Model):
     class Meta: verbose_name_plural = "Partidas de Personal"
     def __str__(self): return self.nombre
     
-# --- MODELO PRINCIPAL (CORREGIDO Y UNIFICADO) ---
+class Proyecto(models.Model):
+    nombre = models.CharField(_("Nombre del Proyecto"), max_length=255, unique=True)
+    fecha_inicio = models.DateField(_("Fecha de Inicio"))
+    fecha_fin_estimada = models.DateField(_("Fecha de Finalización Estimada"))
+
+    def get_valor_planeado_a_fecha(self, fecha_corte: date):
+        """
+        Calcula el PV total del proyecto sumando el PV
+        de todas sus actividades de nivel superior.
+        """
+        actividades_raiz = self.actividades.filter(padre__isnull=True)
+        total_pv = sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
+        return total_pv
+
+    def __str__(self): 
+        return self.nombre
+
+# --- MODELO JERÁRQUICO DE ACTIVIDAD (WBS) ---
 class Actividad(models.Model):
-    # --- Campos para la jerarquía y nombre ---
     nombre = models.CharField(_("Nombre de Actividad/Categoría"), max_length=255)
     padre = models.ForeignKey(
         'self', on_delete=models.CASCADE, null=True, blank=True,
@@ -54,8 +62,7 @@ class Actividad(models.Model):
     )
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='actividades')
     
-    # --- Campos originales del modelo ---
-    partida = models.ForeignKey(PartidaActividad, on_delete=models.PROTECT)
+    partida = models.ForeignKey(PartidaActividad, on_delete=models.PROTECT, null=True, blank=True)
     meta_cantidad_total = models.DecimalField(
         _("Meta de Cantidad"), max_digits=12, decimal_places=2, default=0.00,
         help_text="Solo llenar para actividades finales (sin hijos). Ej: 66470"
@@ -100,6 +107,7 @@ class Actividad(models.Model):
             return f"{self.padre} → {self.nombre}"
         return self.nombre
 
+# --- MODELOS DE REGISTROS ---
 class ReportePersonal(models.Model):
     fecha = models.DateField()
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
@@ -110,7 +118,6 @@ class ReportePersonal(models.Model):
     class Meta: verbose_name_plural = "Reportes de Personal"
     def __str__(self): return f"{self.fecha}: {self.cantidad} x {self.cargo.nombre}"
 
-# --- MODELOS DE REGISTROS DIARIOS ---
 class AvanceDiario(models.Model):
     actividad = models.ForeignKey(Actividad, on_delete=models.CASCADE)
     fecha_reporte = models.DateField()
@@ -126,12 +133,10 @@ class AvanceDiario(models.Model):
 class TipoMaquinaria(models.Model):
     nombre = models.CharField(max_length=100, unique=True, help_text="Ej: Retroexcavadora")
     partida = models.ForeignKey('PartidaActividad', on_delete=models.SET_NULL, null=True, blank=True, help_text="Partida a la que suele pertenecer esta maquinaria")
-
     class Meta:
         verbose_name = "Tipo de Maquinaria"
         verbose_name_plural = "Tipos de Maquinaria"
         ordering = ['nombre']
-
     def __str__(self):
         return self.nombre
 
@@ -141,30 +146,23 @@ class ReporteDiarioMaquinaria(models.Model):
     partida = models.ForeignKey('PartidaActividad', on_delete=models.PROTECT, help_text="Partida en la que se utiliza la maquinaria")
     tipo_maquinaria = models.ForeignKey(TipoMaquinaria, on_delete=models.PROTECT, help_text="Tipo de maquinaria reportada")
     zona_trabajo = models.ForeignKey('AreaDeTrabajo', on_delete=models.PROTECT, help_text="Zona de la obra donde se encuentra")
-
     cantidad_total = models.PositiveIntegerField(help_text="Número total de equipos de este tipo en el día")
     cantidad_activa = models.PositiveIntegerField(help_text="Número de equipos que están activos/operando")
     cantidad_inactiva = models.PositiveIntegerField(help_text="Número de equipos que están inactivos/en descanso")
-    
     observaciones = models.TextField(blank=True, null=True)
-
     class Meta:
         verbose_name = "Reporte Diario de Maquinaria"
         verbose_name_plural = "Reportes Diarios de Maquinaria"
         ordering = ['-fecha', 'partida', 'tipo_maquinaria']
         unique_together = ('fecha', 'tipo_maquinaria', 'partida', 'empresa', 'zona_trabajo')
-
     def __str__(self):
         return f"{self.tipo_maquinaria} - {self.fecha}"
-
     def clean(self):
         if self.cantidad_activa + self.cantidad_inactiva != self.cantidad_total:
-            raise ValidationError(
-                "La suma de la cantidad activa e inactiva debe ser igual a la cantidad total."
-            )
+            raise ValidationError("La suma de la cantidad activa e inactiva debe ser igual a la cantidad total.")
         
 class ReporteClima(models.Model):
-    fecha = models.DateField(unique=True) # Eliminado primary_key=True por convención
+    fecha = models.DateField(unique=True)
     temp_max_c = models.FloatField(help_text="Temperatura máxima en °C")
     temp_min_c = models.FloatField(help_text="Temperatura mínima en °C")
     sensacion_max_c = models.FloatField(help_text="Sensación térmica máxima en °C (horario laboral)")
@@ -173,11 +171,9 @@ class ReporteClima(models.Model):
     precipitacion_no_laboral_mm = models.FloatField(help_text="Precipitación fuera de horario laboral en mm")
     condicion_texto = models.CharField(max_length=100, help_text="Descripción del clima (ej. Neblina)")
     condicion_icono = models.URLField(help_text="URL del ícono del clima")
-
     class Meta:
         verbose_name = "Reporte de Clima"
         verbose_name_plural = "Reportes de Clima"
         ordering = ['-fecha']
-
     def __str__(self):
         return f"Clima del {self.fecha}"

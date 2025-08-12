@@ -15,12 +15,69 @@ from .models import (
 from .forms import ReporteMaquinariaForm, ReportePersonalForm, ActividadForm, ConsultaClimaForm
 
 # --- Importaciones de tu lógica personalizada ---
-from .utils import calcular_avance_diario 
+from .utils import calcular_avance_diario
 from .services import obtener_y_guardar_clima
 
 # --- Función Auxiliar ---
 def es_staff(user):
     return user.is_staff
+
+# --- VISTA DE HISTORIAL UNIFICADA Y POTENTE (VERSIÓN FINAL) ---
+def historial_avance_view(request, proyecto_id):
+    proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
+    
+    # --- LÓGICA DE FILTROS ---
+    semanas = Semana.objects.all()
+    actividades_filtrables = Actividad.objects.filter(proyecto=proyecto, sub_actividades__isnull=True)
+    
+    semana_seleccionada_id = request.GET.get('semana_filtro')
+    actividad_seleccionada_id = request.GET.get('actividad_filtro')
+
+    # Query base para los avances reales
+    avances_reales = AvanceDiario.objects.filter(actividad__proyecto=proyecto)
+    
+    # Por defecto, la fecha de corte para los cálculos es hoy
+    fecha_corte = date.today()
+    actividad_base_calculo = proyecto # Por defecto, calculamos sobre el proyecto entero
+
+    # --- APLICAMOS LOS FILTROS SI EXISTEN ---
+    if semana_seleccionada_id:
+        try:
+            semana_obj = Semana.objects.get(pk=semana_seleccionada_id)
+            fecha_corte = semana_obj.fecha_fin # La fecha de corte es el fin de la semana seleccionada
+            avances_reales = avances_reales.filter(fecha_reporte__range=[semana_obj.fecha_inicio, semana_obj.fecha_fin])
+        except Semana.DoesNotExist:
+            pass
+    
+    actividad_seleccionada = None
+    if actividad_seleccionada_id:
+        actividad_seleccionada = get_object_or_404(Actividad, pk=actividad_seleccionada_id)
+        avances_reales = avances_reales.filter(actividad=actividad_seleccionada)
+        actividad_base_calculo = actividad_seleccionada # Calculamos sobre la actividad específica
+
+    # --- LÓGICA DE CÁLCULOS (Ahora sí, dinámica y basada en filtros) ---
+    total_programado_pv = actividad_base_calculo.get_valor_planeado_a_fecha(fecha_corte)
+    total_real_ev = avances_reales.aggregate(total=Sum('cantidad_realizada_dia'))['total'] or 0
+    
+    rendimiento_spi = (total_real_ev / total_programado_pv * 100) if total_programado_pv > 0 else 0
+    
+    context = {
+        'proyecto': proyecto,
+        'semanas': semanas,
+        'actividades_filtrables': actividades_filtrables,
+        'semana_seleccionada_id': semana_seleccionada_id,
+        'actividad_seleccionada_id': actividad_seleccionada_id,
+        'actividad_seleccionada': actividad_seleccionada,
+        
+        'total_programado_pv': total_programado_pv,
+        'total_real_ev': total_real_ev,
+        'rendimiento_spi': rendimiento_spi,
+        'fecha_corte': fecha_corte,
+        'avances_reales': avances_reales.order_by('-fecha_reporte')
+    }
+    
+    return render(request, 'actividades/historial_avance.html', context)
+
 
 # --- VISTAS NUEVAS PARA GESTIONAR LA JERARQUÍA DE ACTIVIDADES (WBS) ---
 class ActividadListView(ListView):
@@ -49,35 +106,6 @@ class ActividadUpdateView(UpdateView):
     form_class = ActividadForm
     template_name = 'actividades/actividad_form.html'
     success_url = reverse_lazy('actividad_list')
-
-# --- VISTA NUEVA PARA EL HISTORIAL DE AVANCE CON PV DINÁMICO ---
-def historial_avance_view(request, proyecto_id):
-    proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
-    actividades_raiz = Actividad.objects.filter(proyecto=proyecto, padre__isnull=True)
-    
-    historial = []
-    hoy = date.today()
-    for i in range(4): # Historial de las últimas 4 semanas
-        fecha_semana = hoy - timedelta(weeks=i)
-        metricas_semana = {
-            'semana': f"Semana del {fecha_semana.strftime('%d-%b-%Y')}",
-            'fecha': fecha_semana,
-            'actividades': []
-        }
-        for actividad in actividades_raiz:
-            pv = actividad.get_valor_planeado_a_fecha(fecha_semana)
-            total = actividad.cantidad_total_calculada
-            if pv > 0 or total > 0:
-                metricas_semana['actividades'].append({
-                    'nombre': actividad.nombre,
-                    'pv_calculado': pv,
-                    'cantidad_total': total,
-                    'unidad': actividad.unidad_medida,
-                })
-        historial.append(metricas_semana)
-
-    context = {'proyecto': proyecto, 'historial': historial}
-    return render(request, 'actividades/historial_avance.html', context)
 
 
 # --- TUS VISTAS ORIGINALES (INTACTAS Y FUNCIONALES) ---
@@ -139,50 +167,6 @@ def registrar_avance(request):
         }
         return render(request, 'actividades/registrar_avance.html', contexto)
 
-def lista_avances(request):
-    semanas = Semana.objects.all()
-    todas_las_actividades = Actividad.objects.all()
-    semana_seleccionada_id = request.GET.get('semana_filtro')
-    actividad_seleccionada_id = request.GET.get('actividad_filtro')
-    
-    avances = AvanceDiario.objects.select_related('actividad').order_by('-fecha_reporte')
-    unidad_filtrada = None
-
-    if semana_seleccionada_id:
-        try:
-            semana_obj = Semana.objects.get(pk=semana_seleccionada_id)
-            avances = avances.filter(fecha_reporte__range=[semana_obj.fecha_inicio, semana_obj.fecha_fin])
-        except Semana.DoesNotExist: pass
-    
-    if actividad_seleccionada_id:
-        avances = avances.filter(actividad_id=actividad_seleccionada_id)
-        try:
-            unidad_filtrada = Actividad.objects.get(pk=actividad_seleccionada_id).unidad_medida
-        except Actividad.DoesNotExist: pass
-
-    total_real = avances.aggregate(total=Sum('cantidad_realizada_dia'))['total'] or 0
-    total_programado_para_mostrar = avances.filter(
-        fecha_reporte__lte=F('actividad__fecha_fin_programada')
-    ).aggregate(total=Sum('cantidad_programada_dia'))['total'] or 0
-    total_programado_para_spi = avances.filter(
-        fecha_reporte__lte=date.today()
-    ).aggregate(total=Sum('cantidad_programada_dia'))['total'] or 0
-    
-    rendimiento = (total_real / total_programado_para_spi * 100) if total_programado_para_spi > 0 else 0
-
-    contexto = {
-        'avances': avances,
-        'semanas': semanas,
-        'todas_las_actividades': todas_las_actividades,
-        'semana_seleccionada_id': semana_seleccionada_id,
-        'actividad_seleccionada_id': actividad_seleccionada_id,
-        'total_real_acumulado': total_real,
-        'total_programado_acumulado': total_programado_para_mostrar,
-        'unidad_filtrada': unidad_filtrada,
-        'rendimiento': rendimiento,
-    }
-    return render(request, 'actividades/lista_avances.html', contexto)
-
 @login_required
 @user_passes_test(es_staff)
 def editar_avance(request, pk):
@@ -192,7 +176,7 @@ def editar_avance(request, pk):
         avance.cantidad_realizada_dia = request.POST.get('cantidad_realizada', avance.cantidad_realizada_dia)
         avance.save()
         messages.success(request, '¡El avance ha sido actualizado con éxito!')
-        return redirect('lista_avances')
+        return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
     
     contexto = {'avance': avance}
     return render(request, 'actividades/editar_avance.html', contexto)
@@ -201,10 +185,11 @@ def editar_avance(request, pk):
 @user_passes_test(es_staff)
 def borrar_avance(request, pk):
     avance = get_object_or_404(AvanceDiario, pk=pk)
+    proyecto_id = avance.actividad.proyecto.id
     if request.method == 'POST':
         avance.delete()
         messages.success(request, 'El registro ha sido eliminado.')
-        return redirect('lista_avances')
+        return redirect('historial_avance', proyecto_id=proyecto_id)
 
     contexto = {'avance': avance}
     return render(request, 'actividades/confirmar_borrado.html', contexto)
@@ -226,9 +211,7 @@ def registrar_reporte_maquinaria(request):
     else:
         form = ReporteMaquinariaForm()
     
-    contexto = {
-        'form': form, 'titulo': "Registrar Nuevo Reporte de Maquinaria"
-    }
+    contexto = {'form': form, 'titulo': "Registrar Nuevo Reporte de Maquinaria"}
     return render(request, 'actividades/reporte_maquinaria_form.html', contexto)
 
 def editar_reporte_maquinaria(request, pk):
@@ -242,9 +225,7 @@ def editar_reporte_maquinaria(request, pk):
     else:
         form = ReporteMaquinariaForm(instance=reporte)
     
-    contexto = {
-        'form': form, 'titulo': f"Editar Reporte de Maquinaria del {reporte.fecha}"
-    }
+    contexto = {'form': form, 'titulo': f"Editar Reporte de Maquinaria del {reporte.fecha}"}
     return render(request, 'actividades/reporte_maquinaria_form.html', contexto)
 
 def registrar_reporte_personal(request):
@@ -264,9 +245,7 @@ def registrar_reporte_personal(request):
     else:
         form = ReportePersonalForm()
     
-    contexto = {
-        'form': form, 'titulo': "Registrar Reporte de Personal"
-    }
+    contexto = {'form': form, 'titulo': "Registrar Reporte de Personal"}
     return render(request, 'actividades/reporte_personal_form.html', contexto)
 
 def vista_clima(request):
