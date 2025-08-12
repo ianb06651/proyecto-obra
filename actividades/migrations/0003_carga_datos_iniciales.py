@@ -1,99 +1,77 @@
-# actividades/migrations/000X_carga_datos_iniciales.py
-
-from django.db import migrations
+from django.db import migrations, transaction
 from datetime import date, timedelta
 
-# --- LÓGICA DE CÁLCULO COPIADA DEL MODELO ---
-# Esta es la función que antes estaba en models.py. La ponemos aquí
-# para que la migración pueda usarla con los modelos históricos.
-def calcular_pv_para_migracion(actividad, fecha_corte, apps):
-    Actividad = apps.get_model('actividades', 'Actividad')
-    
-    # Buscamos las sub-actividades de forma manual
-    sub_actividades_qs = Actividad.objects.filter(padre_id=actividad.id)
-    
-    if sub_actividades_qs.exists():
-        return sum(calcular_pv_para_migracion(sub, fecha_corte, apps) for sub in sub_actividades_qs)
-
-    if not all([actividad.fecha_inicio_programada, actividad.fecha_fin_programada, actividad.meta_cantidad_total > 0]):
-        return 0
-    if fecha_corte < actividad.fecha_inicio_programada:
-        return 0
-    if fecha_corte >= actividad.fecha_fin_programada:
-        return actividad.meta_cantidad_total
-
-    duracion_total_dias = (actividad.fecha_fin_programada - actividad.fecha_inicio_programada).days + 1
-    dias_transcurridos = (fecha_corte - actividad.fecha_inicio_programada).days + 1
-    
-    if duracion_total_dias <= 0: return 0
-    valor_planeado_dia = actividad.meta_cantidad_total / duracion_total_dias
-    return round(dias_transcurridos * valor_planeado_dia, 2)
-
-
-# --- LÓGICA PARA LA CARGA DE DATOS ---
-
-def crear_semanas_del_anio(apps, schema_editor):
+def carga_inicial(apps, schema_editor):
     Semana = apps.get_model('actividades', 'Semana')
+    Actividad = apps.get_model('actividades', 'Actividad')
+    AvanceDiario = apps.get_model('actividades', 'AvanceDiario')
+
+    # --- 1. CREACIÓN DE SEMANAS (CON MÁS FEEDBACK) ---
+    print("\n[+] Iniciando creación de Semanas...")
     fecha_inicio_semana1 = date(2025, 4, 24)
-    print("\nCreando registros de Semanas...")
     for i in range(52):
         numero = i + 1
         inicio = fecha_inicio_semana1 + timedelta(weeks=i)
         fin = inicio + timedelta(days=6)
-        Semana.objects.get_or_create(
+        obj, created = Semana.objects.get_or_create(
             numero_semana=numero,
             defaults={'fecha_inicio': inicio, 'fecha_fin': fin}
         )
-    print("Registros de Semanas creados.")
+        if created:
+            print(f"  - Semana {numero} creada.")
+    print("[+] Creación de Semanas completada.")
 
-def crear_avances_masivos_despalme(apps, schema_editor):
-    Actividad = apps.get_model('actividades', 'Actividad')
-    AvanceDiario = apps.get_model('actividades', 'AvanceDiario')
+    # --- 2. CREACIÓN DE AVANCES (CON BÚSQUEDA ROBUSTA) ---
+    print("\n[+] Iniciando creación de Avances para 'Despalme'...")
+    
+    # Búsqueda más robusta: filtramos y tomamos el primero.
+    despalme = Actividad.objects.filter(nombre__iexact="Despalme").first()
 
+    if not despalme:
+        print("[!] ADVERTENCIA: No se encontró la actividad 'Despalme'. No se crearán avances.")
+        return # Termina la función si no hay nada que hacer
+
+    print(f"  - Actividad encontrada: '{despalme}' (ID: {despalme.pk})")
+    
     fecha_inicio_avance = date(2025, 5, 2)
     fecha_fin_avance = date(2025, 7, 26)
     avance_diario_fijo = 1996.00
-
-    try:
-        despalme = Actividad.objects.get(nombre__iexact="Despalme")
-    except Actividad.DoesNotExist:
-        print("\nADVERTENCIA: No se encontró la actividad 'Despalme'.")
-        return
-
-    print("Creando registros de avance diario para 'Despalme' (excluyendo domingos)...")
+    
+    registros_creados = 0
     current_date = fecha_inicio_avance
     while current_date <= fecha_fin_avance:
-        if current_date.weekday() != 6:
-            # CAMBIO: Usamos nuestra nueva función local en lugar del método del modelo
-            pv_cumulativo_hoy = calcular_pv_para_migracion(despalme, current_date, apps)
-            pv_cumulativo_ayer = calcular_pv_para_migracion(despalme, current_date - timedelta(days=1), apps)
-            pv_del_dia = pv_cumulativo_hoy - pv_cumulativo_ayer
-
-            AvanceDiario.objects.get_or_create(
+        if current_date.weekday() != 6: # Excluir Domingos
+            
+            # La lógica de PV no es necesaria para la carga inicial de datos históricos
+            # Simplemente registramos el avance real.
+            obj, created = AvanceDiario.objects.get_or_create(
                 actividad=despalme,
                 fecha_reporte=current_date,
-                defaults={
-                    'cantidad_programada_dia': pv_del_dia,
-                    'cantidad_realizada_dia': avance_diario_fijo
-                }
+                defaults={'cantidad_realizada_dia': avance_diario_fijo, 'cantidad_programada_dia': 0}
             )
+            if created:
+                registros_creados += 1
         current_date += timedelta(days=1)
-    print("Registros de avance para 'Despalme' creados.")
+        
+    print(f"  - Se han creado {registros_creados} registros de avance diario.")
+    print("[+] Creación de Avances completada.")
 
-def carga_inicial(apps, schema_editor):
-    crear_semanas_del_anio(apps, schema_editor)
-    crear_avances_masivos_despalme(apps, schema_editor)
+def eliminar_datos(apps, schema_editor):
+    # Función para revertir la migración
+    Semana = apps.get_model('actividades', 'Semana')
+    AvanceDiario = apps.get_model('actividades', 'AvanceDiario')
+    print("\nEliminando datos cargados por la migración...")
+    Semana.objects.all().delete()
+    AvanceDiario.objects.all().delete()
+    print("Datos eliminados.")
 
-def eliminar_datos_cargados(apps, schema_editor):
-    # ... (la lógica de borrado no cambia)
-    pass
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('actividades', '0002_crear_superuser'),
+        ('actividades', '0002_crear_superuser'), # O la migración que corresponda
     ]
 
     operations = [
-        migrations.RunPython(carga_inicial, reverse_code=eliminar_datos_cargados),
+        migrations.RunPython(carga_inicial, reverse_code=eliminar_datos),
     ]
