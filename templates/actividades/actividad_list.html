@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Actividades (WBS){% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Gestión de Actividades (WBS)</h1>
+        <a href="{% url 'actividad_create' %}" class="btn btn-primary">Añadir Nueva Categoría Raíz</a>
+    </div>
+
+    <p class="lead">
+        Esta sección te permite definir la Estructura de Desglose del Trabajo (WBS).
+        Comienza creando una categoría principal (ej: "Terracerías") y luego añade sub-actividades anidadas
+    </p>
+    
+    <div class="card mt-4">
+        <div class="card-body">
+            <ul class="list-unstyled">
+                {% for actividad in actividades %}
+                    {% include "actividades/partials/actividad_recursiva.html" with node=actividad %}
+                {% empty %}
+                    <li class="text-muted">No hay actividades o categorías registradas.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endblock %}

@@ -5,8 +5,9 @@
 {% block content %}
     <div class="card w-75 mx-auto">
         <div class="card-header">
-            <h1>Editar Avance del {{ avance.fecha_reporte }}</h1>
-            <h2>Actividad: {{ avance.actividad.nombre_actividad }}</h2>
+            <h1>Editar Avance del {{ avance.fecha_reporte|date:"d M Y" }}</h1>
+            
+            <h2>Actividad: {{ avance.actividad }}</h2>
         </div>
         <div class="card-body">
             <form method="post">
@@ -21,7 +22,8 @@
                 </div>
                 <hr>
                 <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-                <a href="{% url 'lista_avances' %}" class="btn btn-secondary">Cancelar</a>
+                
+                <a href="{% url 'historial_avance' avance.actividad.proyecto.pk %}" class="btn btn-secondary">Cancelar</a>
             </form>
         </div>
     </div>

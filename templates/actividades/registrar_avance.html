@@ -4,6 +4,7 @@
 
 {% block content %}
     <h1>Registrar Avance Diario</h1>
+    <p>Este formulario es para registrar el avance diario de las actividades de nivel más bajo (las que no tienen sub-actividades).</p>
     <hr>
 
     <div class="card mb-4">
@@ -27,8 +28,7 @@
         </div>
     </div>
 
-
-    {% if actividades %}
+    {% if actividades_filtradas %}
         <div class="card">
             <div class="card-header">
                 <strong>2. Registra el Avance</strong>
@@ -40,8 +40,13 @@
                         <label for="id_actividad" class="form-label">Selecciona la Actividad:</label>
                         <select name="actividad" id="id_actividad" class="form-select" required>
                             <option value="">---------</option>
-                            {% for act in actividades %}
-                                <option value="{{ act.pk }}">{{ act.nombre_actividad }}</option>
+                            {% regroup actividades_filtradas by padre as actividades_agrupadas %}
+                            {% for grupo in actividades_agrupadas %}
+                                <optgroup label="{{ grupo.grouper }}">
+                                    {% for act in grupo.list %}
+                                        <option value="{{ act.pk }}">{{ act.nombre }}</option>
+                                    {% endfor %}
+                                </optgroup>
                             {% endfor %}
                         </select>
                     </div>
@@ -54,13 +59,15 @@
                         <input type="number" step="0.01" name="cantidad_realizada" id="id_cantidad" class="form-control" required>
                     </div>
                     <button type="submit" class="btn btn-primary">Enviar</button>
-                    <a href="{% url 'lista_avances' %}" class="btn btn-secondary">Ver Historial</a>
+                    {% if actividades_filtradas.first.proyecto %}
+                    <a href="{% url 'historial_avance' actividades_filtradas.first.proyecto.pk %}" class="btn btn-secondary">Ver Historial del Proyecto</a>
+                    {% endif %}
                 </form>
             </div>
         </div>
     {% elif partida_seleccionada_id %}
         <div class="alert alert-info" role="alert">
-            No hay actividades para la partida seleccionada.
+            No hay actividades registrables (sin hijos) para la partida seleccionada.
         </div>
     {% endif %}
 

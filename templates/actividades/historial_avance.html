@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Historial de Avance - {{ proyecto.nombre }}{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Historial de Avance: {{ proyecto.nombre }}</h1>
+        <a href="{% url 'registrar_avance' %}" class="btn btn-success">Registrar Nuevo Avance Diario</a>
+    </div>
+
+    <div class="row text-center mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Avance Real (EV)</h5>
+                    <p class="card-text fs-4 fw-bold">
+                        {{ total_real_ev|floatformat:2 }}
+                        {% if actividad_seleccionada %}<span>{{ actividad_seleccionada.unidad_medida }}</span>{% endif %}
+                    </p>
+                    <small class="text-muted">Valor Ganado Acumulado</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Avance Programado (PV)</h5>
+                    <p class="card-text fs-4 fw-bold">
+                        {{ total_programado_pv|floatformat:2 }}
+                        {% if actividad_seleccionada %}<span>{{ actividad_seleccionada.unidad_medida }}</span>{% endif %}
+                    </p>
+                    <small class="text-muted">Valor Planeado Dinámico a la fecha {{ fecha_corte|date:"d-M" }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Desempeño (SPI)</h5>
+                    <p class="card-text fs-4 fw-bold">{{ rendimiento_spi|floatformat:2 }} %</p>
+                    <small class="text-muted">Índice de Desempeño del Cronograma</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row gx-3 gy-2 align-items-center">
+                <div class="col-sm-5">
+                    <label for="id_semana">Filtrar por Semana:</label>
+                    <select name="semana_filtro" id="id_semana" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- Todas las Semanas --</option>
+                        {% for s in semanas %}
+                            <option value="{{ s.pk }}" {% if semana_seleccionada_id == s.pk|stringformat:"s" %}selected{% endif %}>
+                                Semana {{ s.numero_semana }} ({{ s.fecha_inicio }} al {{ s.fecha_fin }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-5">
+                    <label for="id_actividad">Filtrar por Actividad:</label>
+                    <select name="actividad_filtro" id="id_actividad" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- Todas las Actividades (Proyecto Total) --</option>
+                        {% for act in actividades_filtrables %}
+                            <option value="{{ act.pk }}" {% if actividad_seleccionada_id == act.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ act }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-2 d-flex align-items-end">
+                    <a href="{% url 'historial_avance' proyecto.pk %}" class="btn btn-secondary w-100">Limpiar Filtros</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>Fecha</th>
+                <th>Actividad (WBS)</th>
+                <th>Avance Programado Diario (PV)</th>
+                <th>Avance Real Diario (EV)</th>
+                <th>Unidad</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for avance in avances_reales %}
+                <tr>
+                    <td>{{ avance.fecha_reporte|date:"d M Y" }}</td>
+                    <td>{{ avance.actividad }}</td>
+                    <td>{{ avance.cantidad_programada_dia|floatformat:2 }}</td>
+                    <td>{{ avance.cantidad_realizada_dia|floatformat:2 }}</td>
+                    <td>{{ avance.actividad.unidad_medida }}</td>
+                    <td>
+                        <a href="{% url 'editar_avance' avance.pk %}" class="btn btn-sm btn-warning">Editar</a>
+                        <a href="{% url 'borrar_avance' avance.pk %}" class="btn btn-sm btn-danger">Borrar</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center">No hay registros de avance para el filtro seleccionado.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

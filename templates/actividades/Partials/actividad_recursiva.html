@@ -1,0 +1,22 @@
+<li>
+    <div class="d-flex justify-content-between align-items-center p-2">
+        <span>
+            <strong>{{ node.nombre }}</strong>
+            {% if node.unidad_medida %}
+                <em class="text-muted ms-2">(Total: {{ node.cantidad_total_calculada|floatformat:2 }} {{ node.unidad_medida }})</em>
+            {% endif %}
+        </span>
+        <span class="ms-4">
+            <a href="{% url 'actividad_update' node.pk %}" class="btn btn-sm btn-secondary">Editar</a>
+            <a href="{% url 'actividad_create' %}?padre={{ node.pk }}" class="btn btn-sm btn-info">Añadir Sub-actividad</a>
+        </span>
+    </div>
+
+    {% if node.sub_actividades.all %}
+        <ul style="margin-left: 30px; border-left: 2px solid #e0e0e0; padding-left: 15px;">
+            {% for child in node.sub_actividades.all %}
+                {% include "actividades/partials/actividad_recursiva.html" with node=child %}
+            {% endfor %}
+        </ul>
+    {% endif %}
+</li>

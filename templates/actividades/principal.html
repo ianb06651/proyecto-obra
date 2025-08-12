@@ -1,27 +1,48 @@
 {% extends "base.html" %}
 
+{% block title %}Página Principal{% endblock %}
+
 {% block content %}
-    <div class="px-4 py-5 my-5 text-center">
+    <div class="px-4 py-5 my-2 text-center">
         <h1 class="display-5 fw-bold">Panel de Control de Obra</h1>
-        <div class="col-lg-8 mx-auto"> <p class="lead mb-4">Selecciona la acción que deseas realizar.</p>
-            <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
-                
-                <a href="{% url 'registrar_avance' %}" class="btn btn-primary btn-lg px-4 gap-3">
-                    Registrar Avance Diario
-                </a>
-                
-                <a href="{% url 'registrar_reporte_maquinaria' %}" class="btn btn-primary btn-lg px-4 gap-3">
-                    Registrar Maquinaria
-                </a>
-                
-                <a href="{% url 'registrar_reporte_personal' %}" class="btn btn-primary btn-lg px-4 gap-3">
-                    Registrar Personal
-                </a>
+        <div class="col-lg-8 mx-auto">
+            <p class="lead mb-4">
+                Bienvenido. Desde aquí puedes gestionar la estructura de trabajo (WBS) o
+                consultar el historial de avance de un proyecto específico.
+            </p>
+        </div>
+    </div>
 
-                <a href="{% url 'vista_clima' %}" class="btn btn-primary btn-lg px-4 gap-3">
-                   Datos Climatológicos
-               </a>
+    <div class="container acciones-container">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="seccion-accion">
+                    <h2>Acciones Generales</h2>
+                    <p>
+                        Gestiona la estructura de actividades que se aplicará a todos los proyectos.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'actividad_list' %}" class="btn btn-primary btn-lg">Gestionar WBS (Actividades)</a>
+                    </div>
+                </div>
+            </div>
 
+            <div class="col-md-6">
+                <div class="seccion-accion">
+                    <h2>Historial por Proyecto</h2>
+                    <p>
+                        Selecciona un proyecto para ver su historial de avance detallado.
+                    </p>
+                    <div class="list-group">
+                        {% for proyecto in proyectos %}
+                            <a href="{% url 'historial_avance' proyecto.pk %}" class="list-group-item list-group-item-action">
+                                {{ proyecto.nombre }}
+                            </a>
+                        {% empty %}
+                            <p class="text-muted">No hay proyectos registrados. Crea uno en el panel de administración.</p>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>

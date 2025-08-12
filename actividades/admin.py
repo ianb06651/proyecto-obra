@@ -1,16 +1,50 @@
-# En el archivo actividades/admin.py
-
+# src/actividades/admin.py
 from django.contrib import admin
-from .models import Actividad, AvanceDiario, Semana, Empresa, Cargo, ReportePersonal,TipoMaquinaria,ReporteDiarioMaquinaria
+from .models import (
+    Empresa, Cargo, AreaDeTrabajo, Semana, 
+    PartidaActividad, PartidaPersonal, 
+    Actividad, ReportePersonal, AvanceDiario, TipoMaquinaria,
+    ReporteDiarioMaquinaria, ReporteClima, Proyecto
+)
 
-# Register your models here.
-
-admin.site.register(Actividad)
-admin.site.register(AvanceDiario)
-admin.site.register(Semana)
+# --- Registros de Catálogos ---
 admin.site.register(Empresa)
 admin.site.register(Cargo)
-admin.site.register(ReportePersonal)
+admin.site.register(AreaDeTrabajo)
+admin.site.register(Semana)
+admin.site.register(PartidaActividad)
+admin.site.register(PartidaPersonal)
 admin.site.register(TipoMaquinaria)
-admin.site.register(ReporteDiarioMaquinaria)
+admin.site.register(ReporteClima)
 
+# --- Configuraciones Avanzadas ---
+
+@admin.register(Proyecto)
+class ProyectoAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'fecha_inicio', 'fecha_fin_estimada')
+    search_fields = ('nombre',)
+
+@admin.register(Actividad)
+class ActividadAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'partida', 'padre')
+    list_filter = ('partida', 'padre')
+    search_fields = ('nombre', 'padre__nombre')
+    # Facilita la selección del padre cuando hay muchas actividades
+    autocomplete_fields = ['padre']
+    list_per_page = 20
+
+@admin.register(ReportePersonal)
+class ReportePersonalAdmin(admin.ModelAdmin):
+    list_display = ('fecha', 'empresa', 'cargo', 'partida', 'cantidad')
+    list_filter = ('fecha', 'empresa', 'cargo', 'partida')
+
+@admin.register(AvanceDiario)
+class AvanceDiarioAdmin(admin.ModelAdmin):
+    list_display = ('fecha_reporte', 'actividad', 'cantidad_realizada_dia')
+    list_filter = ('fecha_reporte',)
+    autocomplete_fields = ['actividad']
+
+@admin.register(ReporteDiarioMaquinaria)
+class ReporteDiarioMaquinariaAdmin(admin.ModelAdmin):
+    list_display = ('fecha', 'tipo_maquinaria', 'partida', 'empresa', 'cantidad_total', 'cantidad_activa')
+    list_filter = ('fecha', 'empresa', 'partida', 'tipo_maquinaria')

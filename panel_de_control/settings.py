@@ -1,14 +1,13 @@
 # panel_de_control/settings.py
+
 from pathlib import Path
 import os
 import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Lee la SECRET_KEY de una variable de entorno.
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-una-clave-local-cualquiera')
 
-# Detecta si estamos en Render para poner DEBUG = False
 IS_RENDER = os.environ.get('RENDER') == 'true'
 
 if IS_RENDER:
@@ -38,7 +37,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware', # <-- El Middleware está correcto aquí
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -54,7 +53,8 @@ TEMPLATES = [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+                # --- LÍNEA CORREGIDA ---
+                'django.contrib.messages.context_processors.messages', # <-- Este es el Context Processor correcto
             ],
         },
     },
@@ -62,7 +62,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'panel_de_control.wsgi.application'
 
-# Configuración dinámica de la base de datos
+# ... (El resto de tu configuración de base de datos y demás sigue igual) ...
+
 if IS_RENDER:
     DATABASES = {
         'default': dj_database_url.config(conn_max_age=600, ssl_require=True)
@@ -71,14 +72,14 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'huamantla_cedis_registros',
-            'USER': 'iandvb',
-            'PASSWORD': '4nH:12AgY',
-            'HOST': 'localhost',
-            'PORT': '5432',
+            'NAME': os.environ.get('DB_NAME', 'huamantla_cedis_registros_2'),
+            'USER': os.environ.get('DB_USER', 'iandvb'),
+            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
         }
     }
-
+    
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -97,7 +98,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-LOGIN_URL = '/admin/login/' # Ruta de login por defecto de Django
+LOGIN_URL = '/admin/login/'
 
-# Clave para el API del clima. Se lee del entorno.
 WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY')

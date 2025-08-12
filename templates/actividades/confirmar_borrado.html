@@ -3,17 +3,28 @@
 {% block title %}Confirmar Borrado{% endblock %}
 
 {% block content %}
-<div class="card text-center w-50 mx-auto">
-    <div class="card-header">
+<div class="card text-center w-50 mx-auto border-danger">
+    <div class="card-header bg-danger text-white">
         <h1>¿Estás seguro?</h1>
     </div>
     <div class="card-body">
-        <p>Estás a punto de eliminar permanentemente el registro de avance para la actividad <strong>{{ avance.actividad.nombre_actividad }}</strong> del día <strong>{{ avance.fecha_reporte }}</strong>.</p>
+        <p class="card-text">
+            Estás a punto de eliminar permanentemente el registro de avance para la actividad:
+        </p>
+        
+        <h4 class="my-3">"{{ avance.actividad }}"</h4>
+        
+        <p class="card-text">
+            del día <strong>{{ avance.fecha_reporte|date:"d M Y" }}</strong>.
+        </p>
+        
+        <p class="text-danger fw-bold">Esta acción no se puede deshacer.</p>
         
         <form method="post" class="mt-4">
             {% csrf_token %}
-            <button type="submit" class="btn btn-danger">Sí, eliminar</button>
-            <a href="{% url 'lista_avances' %}" class="btn btn-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-danger">Sí, eliminar permanentemente</button>
+            
+            <a href="{% url 'historial_avance' avance.actividad.proyecto.pk %}" class="btn btn-secondary">Cancelar</a>
         </form>
     </div>
 </div>

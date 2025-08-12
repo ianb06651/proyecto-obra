@@ -1,5 +1,5 @@
 from django import forms
-from .models import ReporteDiarioMaquinaria, ReportePersonal
+from .models import ReporteDiarioMaquinaria, ReportePersonal, Actividad, PartidaActividad
 
 class ReporteMaquinariaForm(forms.ModelForm):
     class Meta:
@@ -19,6 +19,15 @@ class ReporteMaquinariaForm(forms.ModelForm):
             'fecha': forms.DateInput(
                 attrs={'type': 'date', 'class': 'form-control'}
             ),
+            # Puedes añadir clases a los otros campos si es necesario
+            'empresa': forms.Select(attrs={'class': 'form-control'}),
+            'partida': forms.Select(attrs={'class': 'form-control'}),
+            'tipo_maquinaria': forms.Select(attrs={'class': 'form-control'}),
+            'zona_trabajo': forms.Select(attrs={'class': 'form-control'}),
+            'cantidad_total': forms.NumberInput(attrs={'class': 'form-control'}),
+            'cantidad_activa': forms.NumberInput(attrs={'class': 'form-control'}),
+            'cantidad_inactiva': forms.NumberInput(attrs={'class': 'form-control'}),
+            'observaciones': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
 
 class ReportePersonalForm(forms.ModelForm):
@@ -40,10 +49,44 @@ class ReportePersonalForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field in self.fields:
             self.fields[field].widget.attrs.update({'class': 'form-control'})
-            
+
 class ConsultaClimaForm(forms.Form):
     fecha = forms.DateField(
         label="Selecciona una fecha",
-        widget=forms.DateInput(attrs={'type': 'date'}),
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
         required=True
     )
+
+class ActividadForm(forms.ModelForm):
+    class Meta:
+        model = Actividad
+        fields = [
+            'nombre',
+            'padre',
+            'proyecto',
+            'partida', # <-- CAMBIO: Campo añadido
+            'meta_cantidad_total',
+            'unidad_medida',
+            'fecha_inicio_programada',
+            'fecha_fin_programada'
+        ]
+        widgets = {
+            # --- MEJORA: Añadimos widgets para consistencia visual ---
+            'fecha_inicio_programada': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_fin_programada': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # --- MEJORA: Se aplican clases CSS a todos los campos para un estilo uniforme ---
+        for field_name, field in self.fields.items():
+            field.widget.attrs.update({'class': 'form-control'})
+
+        # Lógica para evitar que una actividad pueda ser su propio padre
+        if self.instance and self.instance.pk:
+            self.fields['padre'].queryset = Actividad.objects.exclude(pk=self.instance.pk)
+
+        # Ordena el queryset para que sea más fácil encontrar el padre
+        if 'padre' in self.fields:
+             self.fields['padre'].queryset = self.fields['padre'].queryset.order_by('padre__nombre', 'nombre')
