@@ -73,7 +73,7 @@ def carga_inicial(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('actividades', '0003_crear_superuser'), # Asegúrate que esta sea tu última migración
+        ('actividades', '0002_crear_superuser'), # Asegúrate que esta sea tu última migración
     ]
 
     operations = [
