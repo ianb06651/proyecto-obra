@@ -33,14 +33,9 @@ class ReporteMaquinariaForm(forms.ModelForm):
 class ReportePersonalForm(forms.ModelForm):
     class Meta:
         model = ReportePersonal
-        fields = [
-            'fecha',
-            'empresa',
-            'cargo',
-            'partida',
-            'area_de_trabajo',
-            'cantidad',
-        ]
+        # CORRECCIÓN: Usamos '__all__' para incluir todos los campos del modelo,
+        # incluyendo el nuevo campo 'proyecto'.
+        fields = '__all__'
         widgets = {
             'fecha': forms.DateInput(attrs={'type': 'date'}),
         }

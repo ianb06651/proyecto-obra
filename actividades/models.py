@@ -2,6 +2,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from datetime import date, timedelta
+from django.db.models import Sum
 
 # --- CATÁLOGOS ---
 class Empresa(models.Model):
@@ -26,6 +27,18 @@ class Semana(models.Model):
         ordering = ['numero_semana']
     def __str__(self): return f"Semana {self.numero_semana}"
 
+class Proyecto(models.Model):
+    nombre = models.CharField(_("Nombre del Proyecto"), max_length=255, unique=True)
+    fecha_inicio = models.DateField(_("Fecha de Inicio"))
+    fecha_fin_estimada = models.DateField(_("Fecha de Finalización Estimada"))
+
+    def get_valor_planeado_a_fecha(self, fecha_corte: date):
+        actividades_raiz = self.actividades.filter(padre__isnull=True)
+        return sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
+
+    def __str__(self): 
+        return self.nombre
+
 class PartidaActividad(models.Model):
     nombre = models.CharField(max_length=255, unique=True)
     class Meta: verbose_name_plural = "Partidas de Actividades"
@@ -36,21 +49,14 @@ class PartidaPersonal(models.Model):
     class Meta: verbose_name_plural = "Partidas de Personal"
     def __str__(self): return self.nombre
     
-class Proyecto(models.Model):
-    nombre = models.CharField(_("Nombre del Proyecto"), max_length=255, unique=True)
-    fecha_inicio = models.DateField(_("Fecha de Inicio"))
-    fecha_fin_estimada = models.DateField(_("Fecha de Finalización Estimada"))
-
-    def get_valor_planeado_a_fecha(self, fecha_corte: date):
-        """
-        Calcula el PV total del proyecto sumando el PV
-        de todas sus actividades de nivel superior.
-        """
-        actividades_raiz = self.actividades.filter(padre__isnull=True)
-        total_pv = sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
-        return total_pv
-
-    def __str__(self): 
+class TipoMaquinaria(models.Model):
+    nombre = models.CharField(max_length=100, unique=True, help_text="Ej: Retroexcavadora")
+    partida = models.ForeignKey(PartidaActividad, on_delete=models.SET_NULL, null=True, blank=True, help_text="Partida a la que suele pertenecer esta maquinaria")
+    class Meta:
+        verbose_name = "Tipo de Maquinaria"
+        verbose_name_plural = "Tipos de Maquinaria"
+        ordering = ['nombre']
+    def __str__(self):
         return self.nombre
 
 # --- MODELO JERÁRQUICO DE ACTIVIDAD (WBS) ---
@@ -61,7 +67,6 @@ class Actividad(models.Model):
         related_name='sub_actividades', verbose_name=_("Categoría Padre")
     )
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='actividades')
-    
     partida = models.ForeignKey(PartidaActividad, on_delete=models.PROTECT, null=True, blank=True)
     meta_cantidad_total = models.DecimalField(
         _("Meta de Cantidad"), max_digits=12, decimal_places=2, default=0.00,
@@ -78,74 +83,77 @@ class Actividad(models.Model):
             return sum(sub.cantidad_total_calculada for sub in sub_actividades)
         return self.meta_cantidad_total
 
+    def get_pv_diario(self, fecha: date):
+        if self.sub_actividades.exists(): return 0
+        if not all([self.fecha_inicio_programada, self.fecha_fin_programada, self.meta_cantidad_total > 0]): return 0
+        if not (self.fecha_inicio_programada <= fecha <= self.fecha_fin_programada): return 0
+        if fecha.weekday() == 6: return 0
+        dias_laborables = sum(1 for i in range((self.fecha_fin_programada - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
+        if dias_laborables == 0: return 0
+        meta_diaria = self.meta_cantidad_total / dias_laborables
+        return round(meta_diaria, 2)
+    
     def get_valor_planeado_a_fecha(self, fecha_corte: date):
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.get_valor_planeado_a_fecha(fecha_corte) for sub in sub_actividades)
 
-        if not all([self.fecha_inicio_programada, self.fecha_fin_programada, self.meta_cantidad_total > 0]):
-            return 0
-        if fecha_corte < self.fecha_inicio_programada:
-            return 0
-        if fecha_corte >= self.fecha_fin_programada:
-            return self.meta_cantidad_total
-
-        duracion_total_dias = (self.fecha_fin_programada - self.fecha_inicio_programada).days + 1
-        dias_transcurridos = (fecha_corte - self.fecha_inicio_programada).days + 1
+        if not self.fecha_inicio_programada or not self.fecha_fin_programada: return 0
         
-        if duracion_total_dias <= 0: return 0
-        valor_planeado_dia = self.meta_cantidad_total / duracion_total_dias
-        return round(dias_transcurridos * valor_planeado_dia, 2)
-
+        # Lógica de cálculo acumulado correcta
+        total_pv = 0
+        current_date = self.fecha_inicio_programada
+        while current_date <= min(fecha_corte, self.fecha_fin_programada):
+            total_pv += self.get_pv_diario(current_date)
+            current_date += timedelta(days=1)
+            
+        return round(total_pv, 2)
+        
     class Meta:
         verbose_name = "Actividad (WBS)"
         verbose_name_plural = "Actividades (WBS)"
         unique_together = ('nombre', 'padre', 'proyecto')
 
     def __str__(self):
-        if self.padre:
-            return f"{self.padre} → {self.nombre}"
+        if self.padre: return f"{self.padre} → {self.nombre}"
         return self.nombre
 
 # --- MODELOS DE REGISTROS ---
 class ReportePersonal(models.Model):
+    proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE)
     fecha = models.DateField()
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
     cargo = models.ForeignKey(Cargo, on_delete=models.PROTECT)
     partida = models.ForeignKey(PartidaPersonal, on_delete=models.PROTECT)
     area_de_trabajo = models.ForeignKey(AreaDeTrabajo, on_delete=models.PROTECT)
     cantidad = models.PositiveIntegerField()
-    class Meta: verbose_name_plural = "Reportes de Personal"
+    class Meta: 
+        verbose_name_plural = "Reportes de Personal"
+        unique_together = ('proyecto', 'fecha', 'empresa', 'cargo', 'partida', 'area_de_trabajo')
     def __str__(self): return f"{self.fecha}: {self.cantidad} x {self.cargo.nombre}"
 
 class AvanceDiario(models.Model):
-    actividad = models.ForeignKey(Actividad, on_delete=models.CASCADE)
+    actividad = models.ForeignKey(Actividad, on_delete=models.CASCADE, related_name="avances")
     fecha_reporte = models.DateField()
-    cantidad_programada_dia = models.DecimalField(max_digits=12, decimal_places=2)
     cantidad_realizada_dia = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    @property
+    def cantidad_programada_dia(self):
+        return self.actividad.get_pv_diario(self.fecha_reporte)
+
     class Meta:
         verbose_name_plural = "Avances Diarios"
         unique_together = ('actividad', 'fecha_reporte')
         
     def __str__(self):
         return f"Avance de {self.actividad.nombre} en {self.fecha_reporte}"
-    
-class TipoMaquinaria(models.Model):
-    nombre = models.CharField(max_length=100, unique=True, help_text="Ej: Retroexcavadora")
-    partida = models.ForeignKey('PartidaActividad', on_delete=models.SET_NULL, null=True, blank=True, help_text="Partida a la que suele pertenecer esta maquinaria")
-    class Meta:
-        verbose_name = "Tipo de Maquinaria"
-        verbose_name_plural = "Tipos de Maquinaria"
-        ordering = ['nombre']
-    def __str__(self):
-        return self.nombre
 
 class ReporteDiarioMaquinaria(models.Model):
     fecha = models.DateField(help_text="Fecha del reporte")
-    empresa = models.ForeignKey('Empresa', on_delete=models.PROTECT, help_text="Empresa propietaria o que opera la maquinaria")
-    partida = models.ForeignKey('PartidaActividad', on_delete=models.PROTECT, help_text="Partida en la que se utiliza la maquinaria")
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, help_text="Empresa propietaria o que opera la maquinaria")
+    partida = models.ForeignKey(PartidaActividad, on_delete=models.PROTECT, help_text="Partida en la que se utiliza la maquinaria")
     tipo_maquinaria = models.ForeignKey(TipoMaquinaria, on_delete=models.PROTECT, help_text="Tipo de maquinaria reportada")
-    zona_trabajo = models.ForeignKey('AreaDeTrabajo', on_delete=models.PROTECT, help_text="Zona de la obra donde se encuentra")
+    zona_trabajo = models.ForeignKey(AreaDeTrabajo, on_delete=models.PROTECT, help_text="Zona de la obra donde se encuentra")
     cantidad_total = models.PositiveIntegerField(help_text="Número total de equipos de este tipo en el día")
     cantidad_activa = models.PositiveIntegerField(help_text="Número de equipos que están activos/operando")
     cantidad_inactiva = models.PositiveIntegerField(help_text="Número de equipos que están inactivos/en descanso")
