@@ -3,6 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 from django.db.models import Sum
+from functools import cached_property
 
 # --- CATÁLOGOS ---
 class Empresa(models.Model):
@@ -33,8 +34,13 @@ class Proyecto(models.Model):
     fecha_fin_estimada = models.DateField(_("Fecha de Finalización Estimada"))
 
     def get_valor_planeado_a_fecha(self, fecha_corte: date):
+        """
+        Calcula el PV total del proyecto sumando el PV
+        de todas sus actividades de nivel superior.
+        """
         actividades_raiz = self.actividades.filter(padre__isnull=True)
-        return sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
+        total_pv = sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
+        return total_pv
 
     def __str__(self): 
         return self.nombre
@@ -59,7 +65,7 @@ class TipoMaquinaria(models.Model):
     def __str__(self):
         return self.nombre
 
-# --- MODELO JERÁRQUICO DE ACTIVIDAD (WBS) ---
+# --- MODELO JERÁRQUICO DE ACTIVIDAD (WBS) - VERSIÓN OPTIMIZADA ---
 class Actividad(models.Model):
     nombre = models.CharField(_("Nombre de Actividad/Categoría"), max_length=255)
     padre = models.ForeignKey(
@@ -76,38 +82,59 @@ class Actividad(models.Model):
     fecha_inicio_programada = models.DateField(null=True, blank=True)
     fecha_fin_programada = models.DateField(null=True, blank=True)
 
-    @property
+    @cached_property
     def cantidad_total_calculada(self):
+        """Suma recursivamente la meta de las actividades hijas."""
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.cantidad_total_calculada for sub in sub_actividades)
         return self.meta_cantidad_total
 
+    @cached_property
+    def dias_laborables_totales(self):
+        """Calcula una sola vez los días laborables (L-S) del rango de la actividad."""
+        if not self.fecha_inicio_programada or not self.fecha_fin_programada:
+            return 0
+        return sum(1 for i in range((self.fecha_fin_programada - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
+
+    @cached_property
+    def meta_diaria(self):
+        """Calcula una sola vez la meta diaria distribuida en días laborables."""
+        if self.dias_laborables_totales == 0:
+            return 0
+        return self.meta_cantidad_total / self.dias_laborables_totales
+
     def get_pv_diario(self, fecha: date):
-        if self.sub_actividades.exists(): return 0
-        if not all([self.fecha_inicio_programada, self.fecha_fin_programada, self.meta_cantidad_total > 0]): return 0
-        if not (self.fecha_inicio_programada <= fecha <= self.fecha_fin_programada): return 0
-        if fecha.weekday() == 6: return 0
-        dias_laborables = sum(1 for i in range((self.fecha_fin_programada - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
-        if dias_laborables == 0: return 0
-        meta_diaria = self.meta_cantidad_total / dias_laborables
-        return round(meta_diaria, 2)
+        """Devuelve la meta planeada para un solo día específico."""
+        # Las categorías padre no tienen PV diario propio, solo acumulan el de sus hijos.
+        if self.sub_actividades.exists():
+            return 0
+        
+        if not all([self.fecha_inicio_programada, self.fecha_fin_programada, self.meta_cantidad_total > 0]):
+            return 0
+        
+        # El PV es 0 si la fecha está fuera del rango o es domingo.
+        if not (self.fecha_inicio_programada <= fecha <= self.fecha_fin_programada) or fecha.weekday() == 6:
+            return 0
+            
+        return round(self.meta_diaria, 2)
     
     def get_valor_planeado_a_fecha(self, fecha_corte: date):
+        """Calcula el PV acumulado hasta una fecha de corte."""
+        # Si es una categoría padre, su PV es la suma del PV de sus hijos.
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.get_valor_planeado_a_fecha(fecha_corte) for sub in sub_actividades)
 
-        if not self.fecha_inicio_programada or not self.fecha_fin_programada: return 0
+        if not self.fecha_inicio_programada: return 0
         
-        # Lógica de cálculo acumulado correcta
-        total_pv = 0
-        current_date = self.fecha_inicio_programada
-        while current_date <= min(fecha_corte, self.fecha_fin_programada):
-            total_pv += self.get_pv_diario(current_date)
-            current_date += timedelta(days=1)
-            
-        return round(total_pv, 2)
+        # Lógica de cálculo acumulado correcta.
+        if fecha_corte < self.fecha_inicio_programada: return 0
+        if fecha_corte >= self.fecha_fin_programada: return self.meta_cantidad_total # Devuelve el total si ya pasó la fecha.
+
+        dias_laborables_transcurridos = sum(1 for i in range((fecha_corte - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
+        
+        return round(dias_laborables_transcurridos * self.meta_diaria, 2)
         
     class Meta:
         verbose_name = "Actividad (WBS)"
