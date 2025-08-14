@@ -11,11 +11,11 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-una-clave-local-cualq
 IS_RENDER = os.environ.get('RENDER') == 'true'
 
 if IS_RENDER:
-    DEBUG = False
+    DEBUG = True
 else:
     DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
