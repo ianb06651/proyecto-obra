@@ -34,13 +34,14 @@ class Proyecto(models.Model):
     fecha_fin_estimada = models.DateField(_("Fecha de Finalización Estimada"))
 
     def get_valor_planeado_a_fecha(self, fecha_corte: date):
-        """
-        Calcula el PV total del proyecto sumando el PV
-        de todas sus actividades de nivel superior.
-        """
         actividades_raiz = self.actividades.filter(padre__isnull=True)
-        total_pv = sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
-        return total_pv
+        return sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
+
+    # --- NUEVO MÉTODO AÑADIDO ---
+    def get_valor_planeado_en_rango(self, fecha_inicio_rango: date, fecha_fin_rango: date):
+        """Suma el PV de las actividades raíz dentro de un rango de fechas."""
+        actividades_raiz = self.actividades.filter(padre__isnull=True)
+        return sum(act.get_valor_planeado_en_rango(fecha_inicio_rango, fecha_fin_rango) for act in actividades_raiz)
 
     def __str__(self): 
         return self.nombre
@@ -135,6 +136,32 @@ class Actividad(models.Model):
         dias_laborables_transcurridos = sum(1 for i in range((fecha_corte - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
         
         return round(dias_laborables_transcurridos * self.meta_diaria, 2)
+    
+    def get_valor_planeado_en_rango(self, fecha_inicio_rango: date, fecha_fin_rango: date):
+        """
+        Calcula el PV sumando los valores diarios únicamente dentro del rango especificado.
+        """
+        sub_actividades = self.sub_actividades.all()
+        if sub_actividades.exists():
+            return sum(sub.get_valor_planeado_en_rango(fecha_inicio_rango, fecha_fin_rango) for sub in sub_actividades)
+
+        if not self.fecha_inicio_programada or not self.fecha_fin_programada:
+            return 0
+
+        # Determinamos el período de cálculo real que se solapa con el rango solicitado
+        fecha_inicio_calculo = max(self.fecha_inicio_programada, fecha_inicio_rango)
+        fecha_fin_calculo = min(self.fecha_fin_programada, fecha_fin_rango)
+
+        if fecha_fin_calculo < fecha_inicio_calculo:
+            return 0
+
+        total_pv_rango = 0
+        current_date = fecha_inicio_calculo
+        while current_date <= fecha_fin_calculo:
+            total_pv_rango += self.get_pv_diario(current_date)
+            current_date += timedelta(days=1)
+            
+        return round(total_pv_rango, 2)
         
     class Meta:
         verbose_name = "Actividad (WBS)"
