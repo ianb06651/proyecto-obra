@@ -17,7 +17,7 @@
         <div class="card-body">
             <ul class="list-unstyled">
                 {% for actividad in actividades %}
-                    {% include "templates/actividades/Partials/actividad_recursiva.html" with node=actividad %}
+                    {% include "actividades/Partials/actividad_recursiva.html" with node=actividad %}
                 {% empty %}
                     <li class="text-muted">No hay actividades o categorías registradas.</li>
                 {% endfor %}
