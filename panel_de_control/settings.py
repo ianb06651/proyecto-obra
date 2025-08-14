@@ -11,7 +11,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-una-clave-local-cualq
 IS_RENDER = os.environ.get('RENDER') == 'true'
 
 if IS_RENDER:
-    DEBUG = False
+    DEBUG = True
 else:
     DEBUG = True
 
