@@ -11,7 +11,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-una-clave-local-cualq
 IS_RENDER = os.environ.get('RENDER') == 'true'
 
 if IS_RENDER:
-    DEBUG = True
+    DEBUG = False
 else:
     DEBUG = True
 
@@ -53,8 +53,7 @@ TEMPLATES = [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
-                # --- LÍNEA CORREGIDA ---
-                'django.contrib.messages.context_processors.messages', # <-- Este es el Context Processor correcto
+                'django.contrib.messages.context_processors.messages',
             ],
         },
     },
