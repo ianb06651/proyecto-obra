@@ -1,5 +1,8 @@
 from django import forms
-from .models import ReporteDiarioMaquinaria, ReportePersonal, Actividad, PartidaActividad
+from .models import (
+    ReporteDiarioMaquinaria, ReportePersonal, Actividad, 
+    PartidaActividad, AvanceDiario, ReporteClima 
+)
 
 class ReporteMaquinariaForm(forms.ModelForm):
     class Meta:
@@ -19,7 +22,6 @@ class ReporteMaquinariaForm(forms.ModelForm):
             'fecha': forms.DateInput(
                 attrs={'type': 'date', 'class': 'form-control'}
             ),
-            # Puedes añadir clases a los otros campos si es necesario
             'empresa': forms.Select(attrs={'class': 'form-control'}),
             'partida': forms.Select(attrs={'class': 'form-control'}),
             'tipo_maquinaria': forms.Select(attrs={'class': 'form-control'}),
@@ -33,8 +35,6 @@ class ReporteMaquinariaForm(forms.ModelForm):
 class ReportePersonalForm(forms.ModelForm):
     class Meta:
         model = ReportePersonal
-        # CORRECCIÓN: Usamos '__all__' para incluir todos los campos del modelo,
-        # incluyendo el nuevo campo 'proyecto'.
         fields = '__all__'
         widgets = {
             'fecha': forms.DateInput(attrs={'type': 'date'}),
@@ -59,14 +59,13 @@ class ActividadForm(forms.ModelForm):
             'nombre',
             'padre',
             'proyecto',
-            'partida', # <-- CAMBIO: Campo añadido
+            'partida',
             'meta_cantidad_total',
             'unidad_medida',
             'fecha_inicio_programada',
             'fecha_fin_programada'
         ]
         widgets = {
-            # --- MEJORA: Añadimos widgets para consistencia visual ---
             'fecha_inicio_programada': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'fecha_fin_programada': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
         }
@@ -74,14 +73,35 @@ class ActividadForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # --- MEJORA: Se aplican clases CSS a todos los campos para un estilo uniforme ---
         for field_name, field in self.fields.items():
             field.widget.attrs.update({'class': 'form-control'})
 
-        # Lógica para evitar que una actividad pueda ser su propio padre
         if self.instance and self.instance.pk:
             self.fields['padre'].queryset = Actividad.objects.exclude(pk=self.instance.pk)
 
-        # Ordena el queryset para que sea más fácil encontrar el padre
         if 'padre' in self.fields:
-             self.fields['padre'].queryset = self.fields['padre'].queryset.order_by('padre__nombre', 'nombre')
+                self.fields['padre'].queryset = self.fields['padre'].queryset.order_by('padre__nombre', 'nombre')
+
+
+# --- NUEVO FORMULARIO AÑADIDO ---
+class AvanceDiarioForm(forms.ModelForm):
+    """
+    Formulario para registrar el avance diario, incluyendo la empresa contratista.
+    """
+    class Meta:
+        model = AvanceDiario
+        fields = ['actividad', 'fecha_reporte', 'cantidad_realizada_dia', 'empresa']
+        widgets = {
+            'fecha_reporte': forms.DateInput(
+                attrs={'type': 'date', 'class': 'form-control'}
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Aplicamos un estilo consistente a todos los campos del formulario.
+        for field_name, field in self.fields.items():
+            # El widget del campo 'actividad' podría no tener 'attrs' si se reemplaza,
+            # por eso comprobamos primero.
+            if hasattr(field.widget, 'attrs'):
+                field.widget.attrs.update({'class': 'form-control'})

@@ -1,25 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}Registrar Avance Diario{% endblock %}
+{% block title %}Registrar Avance Diario - {{ proyecto.nombre }}{% endblock %}
 
 {% block content %}
-    <h1>Registrar Avance Diario</h1>
-    <p>Este formulario es para registrar el avance diario de las actividades de nivel más bajo (las que no tienen sub-actividades).</p>
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Registrar Avance para: {{ proyecto.nombre }}</h2>
+        <a href="{% url 'historial_avance' proyecto.pk %}" class="btn btn-secondary">Volver al Historial</a>
+    </div>
+    
+    <p>Usa este formulario para registrar el avance diario de las actividades.</p>
     <hr>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}" role="alert">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
 
     <div class="card mb-4">
         <div class="card-header">
-            <strong>1. Filtra por Partida</strong>
+            <strong>Paso 1: Filtrar Actividades (Opcional)</strong>
         </div>
         <div class="card-body">
-            <form method="get">
-                <div class="mb-3">
-                    <label for="id_partida" class="form-label">Selecciona la Partida:</label>
-                    <select name="partida_filtro" id="id_partida" class="form-select" onchange="this.form.submit()">
-                        <option value="">-- Selecciona una Partida --</option>
-                        {% for p in partidas %}
-                            <option value="{{ p.pk }}" {% if partida_seleccionada_id == p.pk|stringformat:"s" %}selected{% endif %}>
-                                {{ p.nombre }}
+            <form method="get" id="partidaFilterForm">
+                <div class="form-group">
+                    <label for="partida_filtro_id">Filtrar por Partida:</label>
+                    <select name="partida_filtro" id="partida_filtro_id" class="form-select" onchange="this.form.submit();">
+                        <option value="">--- Ver todas las actividades ---</option>
+                        {% for partida in partidas %}
+                            <option value="{{ partida.id }}" {% if partida.id|stringformat:"s" == partida_seleccionada_id %}selected{% endif %}>
+                                {{ partida.nombre }}
                             </option>
                         {% endfor %}
                     </select>
@@ -28,47 +41,42 @@
         </div>
     </div>
 
-    {% if actividades_filtradas %}
-        <div class="card">
-            <div class="card-header">
-                <strong>2. Registra el Avance</strong>
-            </div>
-            <div class="card-body">
-                <form method="post">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="id_actividad" class="form-label">Selecciona la Actividad:</label>
-                        <select name="actividad" id="id_actividad" class="form-select" required>
-                            <option value="">---------</option>
-                            {% regroup actividades_filtradas by padre as actividades_agrupadas %}
-                            {% for grupo in actividades_agrupadas %}
-                                <optgroup label="{{ grupo.grouper }}">
-                                    {% for act in grupo.list %}
-                                        <option value="{{ act.pk }}">{{ act.nombre }}</option>
-                                    {% endfor %}
-                                </optgroup>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="id_fecha" class="form-label">Fecha de Registro:</label>
-                        <input type="date" name="fecha_reporte" id="id_fecha" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="id_cantidad" class="form-label">Avance Real del Día:</label>
-                        <input type="number" step="0.01" name="cantidad_realizada" id="id_cantidad" class="form-control" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Enviar</button>
-                    {% if actividades_filtradas.first.proyecto %}
-                    <a href="{% url 'historial_avance' actividades_filtradas.first.proyecto.pk %}" class="btn btn-secondary">Ver Historial del Proyecto</a>
-                    {% endif %}
-                </form>
-            </div>
+    <div class="card">
+        <div class="card-header">
+            <strong>Paso 2: Registrar Avance Diario</strong>
         </div>
-    {% elif partida_seleccionada_id %}
-        <div class="alert alert-info" role="alert">
-            No hay actividades registrables (sin hijos) para la partida seleccionada.
-        </div>
-    {% endif %}
+        <div class="card-body">
+            <form method="post" action="{% url 'registrar_avance' %}">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="{{ form.fecha_reporte.id_for_label }}" class="form-label">{{ form.fecha_reporte.label }}</label>
+                    {{ form.fecha_reporte }}
+                    {% if form.fecha_reporte.errors %}<div class="invalid-feedback d-block">{{ form.fecha_reporte.errors|first }}</div>{% endif %}
+                </div>
 
+                <div class="mb-3">
+                    <label for="{{ form.empresa.id_for_label }}" class="form-label">{{ form.empresa.label }}</label>
+                    {{ form.empresa }}
+                    {% if form.empresa.errors %}<div class="invalid-feedback d-block">{{ form.empresa.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.actividad.id_for_label }}" class="form-label">{{ form.actividad.label }}</label>
+                    {{ form.actividad }}
+                    {% if form.actividad.errors %}<div class="invalid-feedback d-block">{{ form.actividad.errors|first }}</div>{% endif %}
+                    <small class="form-text text-muted">La lista de actividades depende del filtro de partida que elijas arriba.</small>
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.cantidad_realizada_dia.id_for_label }}" class="form-label">{{ form.cantidad_realizada_dia.label }}</dlabel>
+                    {{ form.cantidad_realizada_dia }}
+                    {% if form.cantidad_realizada_dia.errors %}<div class="invalid-feedback d-block">{{ form.cantidad_realizada_dia.errors|first }}</div>{% endif %}
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Guardar Avance</button>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}

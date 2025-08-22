@@ -1,3 +1,5 @@
+# actividades/urls.py
+
 from django.urls import path
 from . import views
 
@@ -6,9 +8,9 @@ urlpatterns = [
     path('', views.pagina_principal, name='pagina_principal'),
 
     # --- URLS PARA AVANCES, REPORTES, ETC. ---
-    # CAMBIO: Añadimos de vuelta la ruta que faltaba
-    path('avance/registrar/', views.registrar_avance, name='registrar_avance'),
     
+    # URL Simplificada: Ya no necesita el ID del proyecto
+    path('avance/registrar/', views.registrar_avance, name='registrar_avance'),
     
     path('avance/editar/<int:pk>/', views.editar_avance, name='editar_avance'),
     path('avance/borrar/<int:pk>/', views.borrar_avance, name='borrar_avance'),
@@ -23,5 +25,6 @@ urlpatterns = [
     path('wbs/<int:pk>/editar/', views.ActividadUpdateView.as_view(), name='actividad_update'),
 
     # --- URL PARA EL HISTORIAL UNIFICADO ---
+    # Esta URL sí necesita el ID para saber qué historial mostrar
     path('proyecto/<int:proyecto_id>/historial/', views.historial_avance_view, name='historial_avance'),
 ]

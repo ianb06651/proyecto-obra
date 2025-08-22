@@ -1,18 +1,23 @@
+# actividades/views.py
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db.models import Sum, F
+from django.db.models import Sum
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy
-from datetime import date, timedelta, datetime
+from datetime import date
 from django.db import IntegrityError
 
+from .forms import (
+    ReporteMaquinariaForm, ReportePersonalForm, ActividadForm,
+    ConsultaClimaForm, AvanceDiarioForm
+)
+from .services import obtener_y_guardar_clima
 from .models import (
-    Actividad, AvanceDiario, Semana, PartidaActividad, ReportePersonal, 
+    Actividad, AvanceDiario, Semana, PartidaActividad, ReportePersonal,
     Empresa, Cargo, AreaDeTrabajo, ReporteDiarioMaquinaria, Proyecto
 )
-from .forms import ReporteMaquinariaForm, ReportePersonalForm, ActividadForm, ConsultaClimaForm
-from .services import obtener_y_guardar_clima
 
 def es_staff(user):
     return user.is_staff
@@ -20,41 +25,52 @@ def es_staff(user):
 def historial_avance_view(request, proyecto_id):
     proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
     semanas = Semana.objects.all()
-    actividades_filtrables = Actividad.objects.filter(proyecto=proyecto, sub_actividades__isnull=True)
+    actividades_filtrables = Actividad.objects.filter(proyecto=proyecto, sub_actividades__isnull=True).order_by('nombre')
     
     semana_seleccionada_id = request.GET.get('semana_filtro')
     actividad_seleccionada_id = request.GET.get('actividad_filtro')
 
-    avances_reales = AvanceDiario.objects.filter(actividad__proyecto=proyecto)
+    avances_reales = AvanceDiario.objects.filter(actividad__proyecto=proyecto).select_related('actividad', 'empresa')
     
+    total_programado_pv = 0
     fecha_corte = date.today()
-    actividad_base_calculo = proyecto
-
-    if semana_seleccionada_id:
-        try:
-            semana_obj = Semana.objects.get(pk=semana_seleccionada_id)
-            fecha_corte = semana_obj.fecha_fin
-            avances_reales = avances_reales.filter(fecha_reporte__range=[semana_obj.fecha_inicio, semana_obj.fecha_fin])
-        except Semana.DoesNotExist:
-            pass
     
+    actividad_base_calculo = proyecto
     actividad_seleccionada = None
+
     if actividad_seleccionada_id:
         actividad_seleccionada = get_object_or_404(Actividad, pk=actividad_seleccionada_id)
         avances_reales = avances_reales.filter(actividad=actividad_seleccionada)
         actividad_base_calculo = actividad_seleccionada
 
-    total_programado_pv = actividad_base_calculo.get_valor_planeado_a_fecha(fecha_corte)
+    if semana_seleccionada_id:
+        try:
+            semana_obj = Semana.objects.get(pk=semana_seleccionada_id)
+            avances_reales = avances_reales.filter(fecha_reporte__range=[semana_obj.fecha_inicio, semana_obj.fecha_fin])
+            total_programado_pv = actividad_base_calculo.get_valor_planeado_en_rango(
+                semana_obj.fecha_inicio, semana_obj.fecha_fin
+            )
+            fecha_corte = semana_obj.fecha_fin
+        except Semana.DoesNotExist:
+            total_programado_pv = actividad_base_calculo.get_valor_planeado_a_fecha(fecha_corte)
+    else:
+        total_programado_pv = actividad_base_calculo.get_valor_planeado_a_fecha(fecha_corte)
+
     total_real_ev = avances_reales.aggregate(total=Sum('cantidad_realizada_dia'))['total'] or 0
-    
     rendimiento_spi = (total_real_ev / total_programado_pv * 100) if total_programado_pv > 0 else 0
     
     context = {
-        'proyecto': proyecto, 'semanas': semanas, 'actividades_filtrables': actividades_filtrables,
-        'semana_seleccionada_id': semana_seleccionada_id, 'actividad_seleccionada_id': actividad_seleccionada_id,
-        'actividad_seleccionada': actividad_seleccionada, 'total_programado_pv': total_programado_pv,
-        'total_real_ev': total_real_ev, 'rendimiento_spi': rendimiento_spi,
-        'fecha_corte': fecha_corte, 'avances_reales': avances_reales.order_by('-fecha_reporte')
+        'proyecto': proyecto,
+        'semanas': semanas,
+        'actividades_filtrables': actividades_filtrables,
+        'semana_seleccionada_id': semana_seleccionada_id,
+        'actividad_seleccionada_id': actividad_seleccionada_id,
+        'actividad_seleccionada': actividad_seleccionada,
+        'total_programado_pv': total_programado_pv,
+        'total_real_ev': total_real_ev,
+        'rendimiento_spi': rendimiento_spi,
+        'fecha_corte': fecha_corte,
+        'avances_reales': avances_reales.order_by('-fecha_reporte')
     }
     
     return render(request, 'actividades/historial_avance.html', context)
@@ -90,41 +106,58 @@ def pagina_principal(request):
     proyectos = Proyecto.objects.all()
     return render(request, 'actividades/principal.html', {'proyectos': proyectos})
 
+# --- VISTA "REGISTRAR_AVANCE" MODIFICADA ---
 def registrar_avance(request):
+    # Ya no recibe proyecto_id, lo busca automáticamente
+    proyecto = Proyecto.objects.first()
+
+    if not proyecto:
+        messages.error(request, 'Error: No hay ningún proyecto registrado en el sistema.')
+        return redirect('pagina_principal')
+    
     if request.method == 'POST':
-        actividad_id = request.POST.get('actividad')
-        fecha_reporte_str = request.POST.get('fecha_reporte')
-        cantidad_realizada = request.POST.get('cantidad_realizada')
+        form = AvanceDiarioForm(request.POST)
+        if form.is_valid():
+            fecha_reporte = form.cleaned_data.get('fecha_reporte')
+            if fecha_reporte and fecha_reporte > date.today():
+                return render(request, 'actividades/error_fecha_futura.html')
 
-        if not all([actividad_id, fecha_reporte_str, cantidad_realizada]):
-            messages.error(request, 'Todos los campos son obligatorios.')
-            return redirect('registrar_avance')
-        
-        fecha_reporte = datetime.strptime(fecha_reporte_str, '%Y-%m-%d').date()
-        if fecha_reporte > date.today():
-           return render(request, 'actividades/error_fecha_futura.html')
-
-        actividad_obj = get_object_or_404(Actividad, pk=actividad_id)
-        
-        # El cálculo del PV ya no se hace aquí. Solo guardamos el avance real.
-        AvanceDiario.objects.update_or_create(
-            actividad=actividad_obj, fecha_reporte=fecha_reporte,
-            defaults={'cantidad_realizada_dia': cantidad_realizada}
-        )
-        messages.success(request, '¡El avance ha sido registrado con éxito!')
-        return redirect('registrar_avance')
+            try:
+                AvanceDiario.objects.update_or_create(
+                    actividad=form.cleaned_data['actividad'],
+                    fecha_reporte=fecha_reporte,
+                    empresa=form.cleaned_data['empresa'],
+                    defaults={'cantidad_realizada_dia': form.cleaned_data['cantidad_realizada_dia']}
+                )
+                messages.success(request, '¡El avance ha sido registrado con éxito!')
+                return redirect('registrar_avance')
+            except IntegrityError:
+                 messages.error(request, 'Error de integridad de datos. Ya existe un registro para esta combinación.')
+        else:
+            messages.error(request, 'Por favor, corrige los errores mostrados en el formulario.')
     else:
-        partidas = PartidaActividad.objects.all()
-        partida_seleccionada_id = request.GET.get('partida_filtro')
-        actividades_filtradas = Actividad.objects.none()
-        if partida_seleccionada_id:
-            actividades_filtradas = Actividad.objects.filter(partida_id=partida_seleccionada_id, sub_actividades__isnull=True).order_by('padre__nombre', 'nombre')
+        form = AvanceDiarioForm()
 
-        contexto = {
-            'partidas': partidas, 'actividades_filtradas': actividades_filtradas,
-            'partida_seleccionada_id': partida_seleccionada_id
-        }
-        return render(request, 'actividades/registrar_avance.html', contexto)
+    form.fields['actividad'].queryset = Actividad.objects.filter(
+        proyecto=proyecto, 
+        sub_actividades__isnull=True
+    ).order_by('nombre')
+    
+    partidas = PartidaActividad.objects.all()
+    partida_seleccionada_id = request.GET.get('partida_filtro')
+    
+    if partida_seleccionada_id:
+        form.fields['actividad'].queryset = form.fields['actividad'].queryset.filter(
+            partida_id=partida_seleccionada_id
+        )
+
+    contexto = {
+        'form': form,
+        'proyecto': proyecto,
+        'partidas': partidas,
+        'partida_seleccionada_id': partida_seleccionada_id,
+    }
+    return render(request, 'actividades/registrar_avance.html', contexto)
 
 @login_required
 @user_passes_test(es_staff)
@@ -159,7 +192,7 @@ def registrar_reporte_maquinaria(request):
         if form.is_valid():
             fecha_seleccionada = form.cleaned_data.get('fecha')
             if fecha_seleccionada and fecha_seleccionada > date.today():
-               return render(request, 'actividades/error_fecha_futura.html')
+                return render(request, 'actividades/error_fecha_futura.html')
             try:
                 form.save()
                 messages.success(request, '¡Reporte de maquinaria guardado exitosamente!')
@@ -188,7 +221,7 @@ def registrar_reporte_personal(request):
         if form.is_valid():
             fecha_seleccionada = form.cleaned_data.get('fecha')
             if fecha_seleccionada and fecha_seleccionada > date.today():
-               return render(request, 'actividades/error_fecha_futura.html')
+                return render(request, 'actividades/error_fecha_futura.html')
             try:
                 form.save()
                 messages.success(request, '¡Reporte de personal guardado exitosamente!')
