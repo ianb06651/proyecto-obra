@@ -26,12 +26,16 @@ class ProyectoAdmin(admin.ModelAdmin):
 
 @admin.register(Actividad)
 class ActividadAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'partida', 'padre')
-    list_filter = ('partida', 'padre')
+    list_display = ('__str__', 'proyecto', 'partida')
+    list_select_related = ('padre', 'proyecto', 'partida')
+
+    list_filter = ('proyecto', 'partida')
+
     search_fields = ('nombre', 'padre__nombre')
-    # Facilita la selección del padre cuando hay muchas actividades
+    
     autocomplete_fields = ['padre']
-    list_per_page = 20
+    
+    list_per_page = 25
 
 @admin.register(ReportePersonal)
 class ReportePersonalAdmin(admin.ModelAdmin):
