@@ -26,15 +26,22 @@ class ProyectoAdmin(admin.ModelAdmin):
 
 @admin.register(Actividad)
 class ActividadAdmin(admin.ModelAdmin):
+    fields = (
+        'proyecto', 
+        'partida', 
+        'padre', 
+        'nombre', 
+        # Agrupar campos en una tupla los muestra en la misma línea
+        ('meta_cantidad_total', 'unidad_medida'), 
+        ('fecha_inicio_programada', 'fecha_fin_programada')
+    )
+
+    # --- CONFIGURACIÓN DE LA VISTA DE LISTA (sin cambios) ---
     list_display = ('__str__', 'proyecto', 'partida')
     list_select_related = ('padre', 'proyecto', 'partida')
-
     list_filter = ('proyecto', 'partida')
-
     search_fields = ('nombre', 'padre__nombre')
-    
     autocomplete_fields = ['padre']
-    
     list_per_page = 25
 
 @admin.register(ReportePersonal)

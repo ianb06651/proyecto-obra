@@ -1,4 +1,5 @@
 from django import forms
+from datetime import date
 from .models import (
     ReporteDiarioMaquinaria, ReportePersonal, Actividad, 
     PartidaActividad, AvanceDiario, ReporteClima 
@@ -66,21 +67,28 @@ class ActividadForm(forms.ModelForm):
             'fecha_fin_programada'
         ]
         widgets = {
-            'fecha_inicio_programada': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_fin_programada': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_inicio_programada': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_fin_programada': forms.DateInput(attrs={'type': 'date'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        for field_name, field in self.fields.items():
-            field.widget.attrs.update({'class': 'form-control'})
 
-        if self.instance and self.instance.pk:
-            self.fields['padre'].queryset = Actividad.objects.exclude(pk=self.instance.pk)
+        for field_name, field in self.fields.items():
+            existing_classes = field.widget.attrs.get('class', '')
+            field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()
+        
+
+        if not self.instance.pk:
+            self.fields['fecha_inicio_programada'].initial = date.today()
+            self.fields['fecha_fin_programada'].initial = date.today()
 
         if 'padre' in self.fields:
-                self.fields['padre'].queryset = self.fields['padre'].queryset.order_by('padre__nombre', 'nombre')
+            queryset = Actividad.objects.all()
+            if self.instance and self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            self.fields['padre'].queryset = queryset.order_by('padre__nombre', 'nombre')
 
 
 # --- NUEVO FORMULARIO AÑADIDO ---
