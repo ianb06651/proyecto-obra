@@ -11,11 +11,6 @@ class Empresa(models.Model):
     def __str__(self): return self.nombre
     
 def get_default_empresa_pk():
-    """
-    Obtiene el PK de la empresa 'PROSER', creándola si no existe.
-    Esto es crucial para que las migraciones puedan asignar un valor por defecto
-    a los registros existentes de AvanceDiario.
-    """
     empresa, created = Empresa.objects.get_or_create(nombre='PROSER')
     return empresa.pk
 
@@ -47,7 +42,6 @@ class Proyecto(models.Model):
         return sum(act.get_valor_planeado_a_fecha(fecha_corte) for act in actividades_raiz)
 
     def get_valor_planeado_en_rango(self, fecha_inicio_rango: date, fecha_fin_rango: date):
-        """Suma el PV de las actividades raíz dentro de un rango de fechas."""
         actividades_raiz = self.actividades.filter(padre__isnull=True)
         return sum(act.get_valor_planeado_en_rango(fecha_inicio_rango, fecha_fin_rango) for act in actividades_raiz)
 
@@ -74,6 +68,23 @@ class TipoMaquinaria(models.Model):
     def __str__(self):
         return self.nombre
 
+# --- MODELO INTERMEDIARIO PARA METAS POR ZONA ---
+class MetaPorZona(models.Model):
+    actividad = models.ForeignKey('Actividad', on_delete=models.CASCADE)
+    zona = models.ForeignKey('AreaDeTrabajo', on_delete=models.CASCADE, verbose_name="Zona de Trabajo")
+    meta_cantidad = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        verbose_name="Meta de Cantidad para esta Zona"
+    )
+    class Meta:
+        verbose_name = "Meta por Zona"
+        verbose_name_plural = "Metas por Zona"
+        unique_together = ('actividad', 'zona')
+    def __str__(self):
+        return f"{self.zona.nombre}: {self.meta_cantidad}"
+
 # --- MODELO JERÁRQUICO DE ACTIVIDAD (WBS) ---
 class Actividad(models.Model):
     nombre = models.CharField(_("Nombre de Actividad/Categoría"), max_length=255)
@@ -83,9 +94,16 @@ class Actividad(models.Model):
     )
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='actividades')
     partida = models.ForeignKey(PartidaActividad, on_delete=models.PROTECT, null=True, blank=True)
+    
     meta_cantidad_total = models.DecimalField(
-        _("Meta de Cantidad"), max_digits=12, decimal_places=2, default=0.00,
-        help_text="Solo llenar para actividades finales (sin hijos). Ej: 66470"
+        _("Meta de Cantidad (si no aplica por zona)"), max_digits=12, decimal_places=2, default=0.00,
+        help_text="Usar solo si la meta es general y no se desglosa por zona."
+    )
+    zonas_con_meta = models.ManyToManyField(
+        'AreaDeTrabajo',
+        through='MetaPorZona',
+        blank=True,
+        verbose_name="Desglose de Metas por Zona"
     )
     unidad_medida = models.CharField(_("Unidad de Medida"), max_length=50, blank=True, help_text="Ej: m3, Ton, Pza")
     fecha_inicio_programada = models.DateField(null=True, blank=True)
@@ -96,6 +114,10 @@ class Actividad(models.Model):
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.cantidad_total_calculada for sub in sub_actividades)
+
+        metas_por_zona = self.metaporzona_set.all()
+        if metas_por_zona.exists():
+            return metas_por_zona.aggregate(total=Sum('meta_cantidad'))['total'] or 0
         return self.meta_cantidad_total
 
     @cached_property
@@ -108,11 +130,11 @@ class Actividad(models.Model):
     def meta_diaria(self):
         if self.dias_laborables_totales == 0:
             return 0
-        return self.meta_cantidad_total / self.dias_laborables_totales
+        return self.cantidad_total_calculada / self.dias_laborables_totales
 
     def get_pv_diario(self, fecha: date):
         if self.sub_actividades.exists(): return 0
-        if not all([self.fecha_inicio_programada, self.fecha_fin_programada, self.meta_cantidad_total > 0]): return 0
+        if not all([self.fecha_inicio_programada, self.fecha_fin_programada, self.cantidad_total_calculada > 0]): return 0
         if not (self.fecha_inicio_programada <= fecha <= self.fecha_fin_programada) or fecha.weekday() == 6: return 0
         return round(self.meta_diaria, 2)
     
@@ -122,7 +144,7 @@ class Actividad(models.Model):
             return sum(sub.get_valor_planeado_a_fecha(fecha_corte) for sub in sub_actividades)
         if not self.fecha_inicio_programada: return 0
         if fecha_corte < self.fecha_inicio_programada: return 0
-        if fecha_corte >= self.fecha_fin_programada: return self.meta_cantidad_total
+        if fecha_corte >= self.fecha_fin_programada: return self.cantidad_total_calculada
         dias_laborables_transcurridos = sum(1 for i in range((fecha_corte - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
         return round(dias_laborables_transcurridos * self.meta_diaria, 2)
     
@@ -146,6 +168,19 @@ class Actividad(models.Model):
         if self.padre: return f"{self.padre} → {self.nombre}"
         return self.nombre
 
+# --- MODELO INTERMEDIARIO PARA AVANCES POR ZONA ---
+class AvancePorZona(models.Model):
+    avance_diario = models.ForeignKey('AvanceDiario', on_delete=models.CASCADE)
+    zona = models.ForeignKey('AreaDeTrabajo', on_delete=models.CASCADE, verbose_name="Zona de Trabajo")
+    cantidad_realizada = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        verbose_name="Cantidad Realizada en esta Zona"
+    )
+    class Meta:
+        verbose_name = "Avance por Zona"
+        verbose_name_plural = "Avances por Zona"
+        unique_together = ('avance_diario', 'zona')
+
 # --- MODELOS DE REGISTROS ---
 class ReportePersonal(models.Model):
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE)
@@ -163,21 +198,30 @@ class ReportePersonal(models.Model):
 class AvanceDiario(models.Model):
     actividad = models.ForeignKey(Actividad, on_delete=models.CASCADE, related_name="avances")
     fecha_reporte = models.DateField()
-    cantidad_realizada_dia = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.PROTECT,
         default=get_default_empresa_pk,
         verbose_name="Empresa Contratista"
     )
-    # ManyToManyField permite seleccionar múltiples "Áreas de Trabajo".
-    # blank=True lo hace opcional, así no afectará a registros existentes.
+    cantidad_realizada_dia = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        verbose_name="Avance General (si no aplica por zona)",
+        help_text="Llenar este campo solo si el avance del día no se desglosa por zonas."
+    )
     zonas = models.ManyToManyField(
         AreaDeTrabajo,
-        blank=True,
-        verbose_name="Zonas de Trabajo Aplicables"
+        through='AvancePorZona',
+        blank=True
     )
     
+    @property
+    def total_realizado_calculado(self):
+        avances_por_zona = self.avanceporzona_set.all()
+        if avances_por_zona.exists():
+            return avances_por_zona.aggregate(total=Sum('cantidad_realizada'))['total'] or 0
+        return self.cantidad_realizada_dia
+
     @property
     def cantidad_programada_dia(self):
         return self.actividad.get_pv_diario(self.fecha_reporte)
@@ -190,7 +234,6 @@ class AvanceDiario(models.Model):
         if hasattr(self, 'empresa') and self.empresa:
             return f"Avance de {self.actividad.nombre} por {self.empresa.nombre} en {self.fecha_reporte}"
         return f"Avance de {self.actividad.nombre} en {self.fecha_reporte}"
-    
     
 class ReporteDiarioMaquinaria(models.Model):
     fecha = models.DateField(help_text="Fecha del reporte")
