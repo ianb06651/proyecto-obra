@@ -1,28 +1,21 @@
+# actividades/forms.py
+
 from django import forms
 from datetime import date
 from .models import (
     ReporteDiarioMaquinaria, ReportePersonal, Actividad, 
-    PartidaActividad, AvanceDiario, ReporteClima 
+    PartidaActividad, AvanceDiario, ReporteClima
 )
 
 class ReporteMaquinariaForm(forms.ModelForm):
     class Meta:
         model = ReporteDiarioMaquinaria
         fields = [
-            'fecha',
-            'empresa',
-            'partida',
-            'tipo_maquinaria',
-            'zona_trabajo',
-            'cantidad_total',
-            'cantidad_activa',
-            'cantidad_inactiva',
-            'observaciones',
+            'fecha', 'empresa', 'partida', 'tipo_maquinaria', 'zona_trabajo',
+            'cantidad_total', 'cantidad_activa', 'cantidad_inactiva', 'observaciones',
         ]
         widgets = {
-            'fecha': forms.DateInput(
-                attrs={'type': 'date', 'class': 'form-control'}
-            ),
+            'fecha': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'empresa': forms.Select(attrs={'class': 'form-control'}),
             'partida': forms.Select(attrs={'class': 'form-control'}),
             'tipo_maquinaria': forms.Select(attrs={'class': 'form-control'}),
@@ -32,6 +25,12 @@ class ReporteMaquinariaForm(forms.ModelForm):
             'cantidad_inactiva': forms.NumberInput(attrs={'class': 'form-control'}),
             'observaciones': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Establece la fecha de hoy por defecto al crear un nuevo reporte
+        if not self.instance.pk and 'fecha' in self.fields:
+            self.fields['fecha'].initial = date.today()
 
 class ReportePersonalForm(forms.ModelForm):
     class Meta:
@@ -43,6 +42,11 @@ class ReportePersonalForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Establece la fecha de hoy por defecto al crear un nuevo reporte
+        if not self.instance.pk and 'fecha' in self.fields:
+            self.fields['fecha'].initial = date.today()
+        
+        # Aplica la clase CSS a todos los campos
         for field in self.fields:
             self.fields[field].widget.attrs.update({'class': 'form-control'})
 
@@ -50,21 +54,17 @@ class ConsultaClimaForm(forms.Form):
     fecha = forms.DateField(
         label="Selecciona una fecha",
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-        required=True
+        required=True,
+        # En forms.Form, se usa 'initial' directamente
+        initial=date.today
     )
 
 class ActividadForm(forms.ModelForm):
     class Meta:
         model = Actividad
         fields = [
-            'nombre',
-            'padre',
-            'proyecto',
-            'partida',
-            'meta_cantidad_total',
-            'unidad_medida',
-            'fecha_inicio_programada',
-            'fecha_fin_programada'
+            'nombre', 'padre', 'proyecto', 'partida', 'meta_cantidad_total',
+            'unidad_medida', 'fecha_inicio_programada', 'fecha_fin_programada'
         ]
         widgets = {
             'fecha_inicio_programada': forms.DateInput(attrs={'type': 'date'}),
@@ -73,13 +73,11 @@ class ActividadForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
-
         for field_name, field in self.fields.items():
             existing_classes = field.widget.attrs.get('class', '')
             field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()
         
-
+        # Establece la fecha de hoy por defecto al crear una nueva actividad
         if not self.instance.pk:
             self.fields['fecha_inicio_programada'].initial = date.today()
             self.fields['fecha_fin_programada'].initial = date.today()
@@ -90,26 +88,24 @@ class ActividadForm(forms.ModelForm):
                 queryset = queryset.exclude(pk=self.instance.pk)
             self.fields['padre'].queryset = queryset.order_by('padre__nombre', 'nombre')
 
-
-# --- NUEVO FORMULARIO AÑADIDO ---
 class AvanceDiarioForm(forms.ModelForm):
-    """
-    Formulario para registrar el avance diario, incluyendo la empresa contratista.
-    """
     class Meta:
         model = AvanceDiario
-        fields = ['actividad', 'fecha_reporte', 'cantidad_realizada_dia', 'empresa']
+        fields = ['actividad', 'fecha_reporte', 'empresa', 'zonas', 'cantidad_realizada_dia']
         widgets = {
-            'fecha_reporte': forms.DateInput(
-                attrs={'type': 'date', 'class': 'form-control'}
-            ),
+            'fecha_reporte': forms.DateInput(attrs={'type': 'date'}),
+            'zonas': forms.SelectMultiple(attrs={'size': '5'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Aplicamos un estilo consistente a todos los campos del formulario.
+        # Establece la fecha de hoy por defecto al crear un nuevo avance
+        if not self.instance.pk and 'fecha_reporte' in self.fields:
+            self.fields['fecha_reporte'].initial = date.today()
+
+        # Aplica la clase CSS a todos los campos
         for field_name, field in self.fields.items():
-            # El widget del campo 'actividad' podría no tener 'attrs' si se reemplaza,
-            # por eso comprobamos primero.
             if hasattr(field.widget, 'attrs'):
-                field.widget.attrs.update({'class': 'form-control'})
+                existing_classes = field.widget.attrs.get('class', '')
+                if 'form-control' not in existing_classes:
+                    field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()

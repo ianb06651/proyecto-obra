@@ -22,7 +22,7 @@
 
     <div class="card mb-4">
         <div class="card-header">
-            <strong>Paso 1: Filtrar Actividades (Opcional)</strong>
+            <strong>Filtrar Actividades (Opcional)</strong>
         </div>
         <div class="card-body">
             <form method="get" id="partidaFilterForm">
@@ -43,7 +43,7 @@
 
     <div class="card">
         <div class="card-header">
-            <strong>Paso 2: Registrar Avance Diario</strong>
+            <strong>Registrar Avance Diario</strong>
         </div>
         <div class="card-body">
             <form method="post" action="{% url 'registrar_avance' %}">
@@ -69,7 +69,14 @@
                 </div>
 
                 <div class="mb-3">
-                    <label for="{{ form.cantidad_realizada_dia.id_for_label }}" class="form-label">{{ form.cantidad_realizada_dia.label }}</dlabel>
+                    <label for="{{ form.zonas.id_for_label }}" class="form-label">{{ form.zonas.label }}</label>
+                    {{ form.zonas }}
+                    {% if form.zonas.errors %}<div class="invalid-feedback d-block">{{ form.zonas.errors|first }}</div>{% endif %}
+                    <small class="form-text text-muted">Mantén presionada la tecla Ctrl para seleccionar varias zonas.</small>
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.cantidad_realizada_dia.id_for_label }}" class="form-label">{{ form.cantidad_realizada_dia.label }}</label>
                     {{ form.cantidad_realizada_dia }}
                     {% if form.cantidad_realizada_dia.errors %}<div class="invalid-feedback d-block">{{ form.cantidad_realizada_dia.errors|first }}</div>{% endif %}
                 </div>

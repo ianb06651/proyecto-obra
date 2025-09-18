@@ -170,6 +170,13 @@ class AvanceDiario(models.Model):
         default=get_default_empresa_pk,
         verbose_name="Empresa Contratista"
     )
+    # ManyToManyField permite seleccionar múltiples "Áreas de Trabajo".
+    # blank=True lo hace opcional, así no afectará a registros existentes.
+    zonas = models.ManyToManyField(
+        AreaDeTrabajo,
+        blank=True,
+        verbose_name="Zonas de Trabajo Aplicables"
+    )
     
     @property
     def cantidad_programada_dia(self):
@@ -183,7 +190,8 @@ class AvanceDiario(models.Model):
         if hasattr(self, 'empresa') and self.empresa:
             return f"Avance de {self.actividad.nombre} por {self.empresa.nombre} en {self.fecha_reporte}"
         return f"Avance de {self.actividad.nombre} en {self.fecha_reporte}"
-
+    
+    
 class ReporteDiarioMaquinaria(models.Model):
     fecha = models.DateField(help_text="Fecha del reporte")
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, help_text="Empresa propietaria o que opera la maquinaria")
