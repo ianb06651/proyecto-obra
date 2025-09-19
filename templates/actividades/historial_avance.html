@@ -26,13 +26,13 @@
     </div>
 
     <div class="table-responsive">
-        <table class="table table-striped table-hover">
+        <table class="table table-striped table-hover align-middle">
             <thead class="table-dark">
                 <tr>
                     <th>Fecha</th>
                     <th>Actividad (WBS)</th>
-                    <th>Avance Programado (PV)</th>
-                    <th>Avance Real (EV)</th>
+                    <th>Programado (PV)</th>
+                    <th>Avance Total (EV)</th>
                     <th>Empresa</th>
                     <th>Unidad</th>
                     <th>Acciones</th>
@@ -44,7 +44,15 @@
                         <td>{{ avance.fecha_reporte|date:"d M Y" }}</td>
                         <td>{{ avance.actividad }}</td>
                         <td>{{ avance.cantidad_programada_dia|floatformat:2 }}</td>
-                        <td>{{ avance.cantidad_realizada_dia|floatformat:2 }}</td>
+                        <td>
+                            <span class="fw-bold">{{ avance.cantidad_total|floatformat:2 }}</span>
+
+                            {% if avance.avances_por_zona.all %}
+                                <button class="btn btn-sm btn-outline-info ms-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ avance.pk }}" aria-expanded="false" aria-controls="collapse-{{ avance.pk }}">
+                                    Ver Zonas
+                                </button>
+                            {% endif %}
+                        </td>
                         <td>{{ avance.empresa.nombre|default:"N/A" }}</td>
                         <td>{{ avance.actividad.unidad_medida }}</td>
                         <td>
@@ -52,6 +60,23 @@
                             <a href="{% url 'borrar_avance' avance.pk %}" class="btn btn-sm btn-danger">Borrar</a>
                         </td>
                     </tr>
+                    {% if avance.avances_por_zona.all %}
+                    <tr class="collapse" id="collapse-{{ avance.pk }}">
+                        <td colspan="7" class="p-0">
+                            <div class="p-3 bg-light">
+                                <h6 class="mb-2"><strong>Desglose por Zona para el {{ avance.fecha_reporte|date:"d M Y" }}:</strong></h6>
+                                <ul class="list-group list-group-flush">
+                                {% for desglose in avance.avances_por_zona.all %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                                        {{ desglose.zona.nombre }}
+                                        <span class="badge bg-primary rounded-pill">{{ desglose.cantidad|floatformat:2 }} {{ avance.actividad.unidad_medida }}</span>
+                                    </li>
+                                {% endfor %}
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
                 {% empty %}
                     <tr>
                         <td colspan="7" class="text-center">No hay registros de avance para el filtro seleccionado.</td>
