@@ -35,6 +35,8 @@ class MetaPorZonaInline(admin.TabularInline):
     model = MetaPorZona
     extra = 1
     autocomplete_fields = ['zona']
+    # Añadimos los campos al inline para que se puedan editar
+    fields = ('zona', 'meta', 'fecha_inicio_programada', 'fecha_fin_programada')
 
 class AvancePorZonaInline(admin.TabularInline):
     model = AvancePorZona

@@ -72,15 +72,43 @@ class TipoMaquinaria(models.Model):
 
 # --- NUEVO MODELO INTERMEDIO PARA METAS POR ZONA ---
 class MetaPorZona(models.Model):
-    """Modelo 'through' para almacenar la meta de una actividad en una zona específica."""
     actividad = models.ForeignKey('Actividad', on_delete=models.CASCADE, related_name='metas_por_zona')
     zona = models.ForeignKey(AreaDeTrabajo, on_delete=models.CASCADE, verbose_name="Zona de Trabajo")
     meta = models.DecimalField(_("Meta por Zona"), max_digits=12, decimal_places=2)
+
+    # --- NUEVOS CAMPOS ---
+    # Hacemos que las fechas sean opcionales. Si son NULL, se usarán las de la Actividad padre.
+    fecha_inicio_programada = models.DateField(null=True, blank=True)
+    fecha_fin_programada = models.DateField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Meta por Zona"
         verbose_name_plural = "Metas por Zona"
         unique_together = ('actividad', 'zona')
+
+    # --- NUEVO MÉTODO AUXILIAR ---
+    # Este método encapsula la lógica de cálculo para una sola zona.
+    def get_valor_planeado_individual(self, fecha_corte: date):
+        # Usa las fechas de la zona si existen, si no, las de la actividad padre.
+        fecha_inicio = self.fecha_inicio_programada or self.actividad.fecha_inicio_programada
+        fecha_fin = self.fecha_fin_programada or self.actividad.fecha_fin_programada
+
+        if not fecha_inicio or not fecha_fin:
+            return 0
+        if fecha_corte < fecha_inicio:
+            return 0
+        if fecha_corte >= fecha_fin:
+            return self.meta
+
+        dias_totales = sum(1 for i in range((fecha_fin - fecha_inicio).days + 1) if (fecha_inicio + timedelta(days=i)).weekday() != 6)
+        if dias_totales == 0:
+            return 0
+        
+        meta_diaria_zona = self.meta / dias_totales
+
+        dias_transcurridos = sum(1 for i in range((fecha_corte - fecha_inicio).days + 1) if (fecha_inicio + timedelta(days=i)).weekday() != 6)
+        
+        return round(dias_transcurridos * meta_diaria_zona, 2)
 
 # --- NUEVO MODELO INTERMEDIO PARA AVANCES POR ZONA ---
 class AvancePorZona(models.Model):
@@ -167,15 +195,36 @@ class Actividad(models.Model):
         if not (self.fecha_inicio_programada <= fecha <= self.fecha_fin_programada) or fecha.weekday() == 6: return 0
         return round(self.meta_diaria, 2)
 
+    # actividades/models.py -> dentro de la clase Actividad
+
     def get_valor_planeado_a_fecha(self, fecha_corte: date):
+        # Primero, manejamos las actividades que son 'padre' (agrupadoras)
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.get_valor_planeado_a_fecha(fecha_corte) for sub in sub_actividades)
-        if not self.fecha_inicio_programada: return 0
-        if fecha_corte < self.fecha_inicio_programada: return 0
-        if fecha_corte >= self.fecha_fin_programada: return self.meta_total
-        dias_laborables_transcurridos = sum(1 for i in range((fecha_corte - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
-        return round(dias_laborables_transcurridos * self.meta_diaria, 2)
+
+        # --- LÓGICA REESCRITA ---
+        metas_por_zona = self.metas_por_zona.all()
+
+        # CASO 1: La actividad tiene desglose por zonas
+        if metas_por_zona.exists():
+            total_pv_zonas = 0
+            # Iteramos sobre cada meta de zona y calculamos su PV individualmente
+            for meta_zona in metas_por_zona:
+                total_pv_zonas += meta_zona.get_valor_planeado_individual(fecha_corte)
+            return total_pv_zonas
+
+        # CASO 2: La actividad NO tiene desglose (comportamiento antiguo)
+        else:
+            if not self.fecha_inicio_programada: return 0
+            if fecha_corte < self.fecha_inicio_programada: return 0
+            # Usamos meta_total para ser consistentes, aunque aquí será igual a meta_general
+            if fecha_corte >= self.fecha_fin_programada: return self.meta_total
+
+            dias_laborables_transcurridos = sum(1 for i in range((fecha_corte - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
+            
+            # Usamos la propiedad meta_diaria que ya calcula en base a meta_total
+            return round(dias_laborables_transcurridos * self.meta_diaria, 2)
 
     def get_valor_planeado_en_rango(self, fecha_inicio_rango: date, fecha_fin_rango: date):
         sub_actividades = self.sub_actividades.all()

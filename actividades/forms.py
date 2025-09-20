@@ -62,16 +62,15 @@ class ConsultaClimaForm(forms.Form):
 # --- 1. Formularios para el modelo Actividad ---
 
 class MetaPorZonaForm(forms.ModelForm):
-    """Formulario para una sola entrada de meta por zona."""
     class Meta:
         model = MetaPorZona
-        fields = ['zona', 'meta']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Aplicar clases CSS para bootstrap
-        self.fields['zona'].widget.attrs.update({'class': 'form-control'})
-        self.fields['meta'].widget.attrs.update({'class': 'form-control'})
+        # Añadir los nuevos campos de fecha
+        fields = ['zona', 'meta', 'fecha_inicio_programada', 'fecha_fin_programada']
+        # Añadir widgets para que aparezca el selector de calendario
+        widgets = {
+            'fecha_inicio_programada': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_fin_programada': forms.DateInput(attrs={'type': 'date'}),
+        }
 
 # FormSet para manejar múltiples metas por zona
 MetaPorZonaFormSet = modelformset_factory(
