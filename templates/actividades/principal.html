@@ -7,27 +7,31 @@
         <h1 class="display-5 fw-bold">Panel de Control de Obra</h1>
         <div class="col-lg-8 mx-auto">
             <p class="lead mb-4">
-                Bienvenido. Desde aquí puedes gestionar la estructura de trabajo (WBS) o
-                consultar el historial de avance de un proyecto específico.
+                Bienvenido. Desde aquí puedes registrar reportes
+                o consultar el historial y el clima del proyecto.
             </p>
         </div>
     </div>
 
     <div class="container acciones-container">
         <div class="row">
-            <div class="col-md-6">
+            {# --- Tarjeta 1: Acciones Generales (con el nuevo botón) --- #}
+            <div class="col-md-4">
                 <div class="seccion-accion">
                     <h2>Acciones Generales</h2>
                     <p>
-                        Gestiona la estructura de actividades que se aplicará a todos los proyectos.
+                        Registra nuevos reportes de avances o de maquinaria.
                     </p>
                     <div class="d-grid gap-2">
-                        <a href="{% url 'actividad_list' %}" class="btn btn-primary btn-lg">Gestionar WBS (Actividades)</a>
+                        <a href="{% url 'actividad_create' %}" class="btn btn-primary btn-lg">Registrar Actividad</a>
+                        {# Botón de maquinaria movido a esta tarjeta #}
+                        <a href="{% url 'registrar_reporte_maquinaria' %}" class="btn btn-secondary btn-lg">Registrar Maquinaria</a>
                     </div>
                 </div>
             </div>
 
-            <div class="col-md-6">
+            {# --- Tarjeta 2: Historial (restaurada a su estado original) --- #}
+            <div class="col-md-4">
                 <div class="seccion-accion">
                     <h2>Historial por Proyecto</h2>
                     <p>
@@ -39,8 +43,21 @@
                                 {{ proyecto.nombre }}
                             </a>
                         {% empty %}
-                            <p class="text-muted">No hay proyectos registrados. Crea uno en el panel de administración.</p>
+                            <p class="text-muted">No hay proyectos registrados.</p>
                         {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            {# --- Tarjeta 3: Consulta Climatológica (sin cambios) --- #}
+            <div class="col-md-4">
+                <div class="seccion-accion">
+                    <h2>Consulta Climatológica</h2>
+                    <p>
+                        Consulta el pronóstico del tiempo para la ubicación del proyecto.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'vista_clima' %}" class="btn btn-info btn-lg text-white">Ver Pronóstico del Clima</a>
                     </div>
                 </div>
             </div>

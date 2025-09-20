@@ -12,7 +12,21 @@
     <div class="row text-center mb-4">
         <div class="col-md-4 mb-3"><div class="card h-100"><div class="card-body"><h5 class="card-title">Avance Real (EV)</h5><p class="card-text fs-4 fw-bold">{{ total_real_ev|floatformat:2 }} {% if actividad_seleccionada %}<span>{{ actividad_seleccionada.unidad_medida }}</span>{% endif %}</p><small class="text-muted">Valor Ganado</small></div></div></div>
         <div class="col-md-4 mb-3"><div class="card h-100"><div class="card-body"><h5 class="card-title">Avance Programado (PV)</h5><p class="card-text fs-4 fw-bold">{{ total_programado_pv|floatformat:2 }} {% if actividad_seleccionada %}<span>{{ actividad_seleccionada.unidad_medida }}</span>{% endif %}</p><small class="text-muted">Valor Planeado al {{ fecha_corte|date:"d-M" }}</small></div></div></div>
-        <div class="col-md-4 mb-3"><div class="card h-100"><div class="card-body"><h5 class="card-title">Desempeño (SPI)</h5><p class="card-text fs-4 fw-bold {% if rendimiento_spi >= 100 %}text-success{% elif rendimiento_spi < 90 %}text-danger{% else %}text-warning{% endif %}">{{ rendimiento_spi|floatformat:2 }} %</p><small class="text-muted">Índice de Desempeño</small></div></div></div>
+        
+        {# --- ESTA ES LA TARJETA MODIFICADA --- #}
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Desempeño (SPI)</h5>
+                    {# 1. Se cambió la lógica para usar valores decimales (>= 1 y < 0.9) #}
+                    {# 2. Se eliminó el símbolo de porcentaje "%" del final #}
+                    <p class="card-text fs-4 fw-bold {% if rendimiento_spi >= 1 %}text-success{% elif rendimiento_spi < 0.9 %}text-danger{% else %}text-warning{% endif %}">
+                        {{ rendimiento_spi|floatformat:2 }}
+                    </p>
+                    <small class="text-muted">Índice de Desempeño</small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="card mb-4">

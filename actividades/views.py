@@ -273,53 +273,50 @@ def registrar_avance(request):
 @user_passes_test(es_staff)
 def editar_avance(request, pk):
     avance = get_object_or_404(AvanceDiario, pk=pk)
-    
+    tiene_desglose = avance.avances_por_zona.exists()
+
     if request.method == 'POST':
         form = AvanceDiarioForm(request.POST, instance=avance)
-        formset = AvancePorZonaFormSet(request.POST, instance=avance)
-        
-        if form.is_valid():
-            tipo_registro = form.cleaned_data.get('tipo_registro')
-            try:
-                with transaction.atomic():
-                    avance_actualizado = form.save(commit=False)
-                    
-                    if tipo_registro == 'por_zona':
-                        if formset.is_valid():
-                            # Borrar los desgloses antiguos para evitar duplicados
-                            avance_actualizado.avances_por_zona.all().delete()
-                            avance_actualizado.save()
-                            
-                            instances = formset.save(commit=False)
-                            for instance in instances:
-                                instance.avance_diario = avance_actualizado
-                                instance.save()
-                            # Eliminar los que se marcaron para borrar
-                            for obj in formset.deleted_objects:
-                                obj.delete()
-                        else:
-                             messages.error(request, 'Errores en el desglose por zona.')
-                             return render(request, 'actividades/editar_avance.html', {'form': form, 'formset': formset, 'avance': avance})
-                    else: # tipo_registro == 'general'
-                        # Si se cambia a general, borrar los desgloses por zona existentes
-                        avance_actualizado.avances_por_zona.all().delete()
-                        avance_actualizado.save()
+        formset = AvancePorZonaFormSet(request.POST, queryset=avance.avances_por_zona.all())
 
-                    messages.success(request, '¡El avance ha sido actualizado con éxito!')
-                    return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
-            except Exception as e:
-                messages.error(request, f'Ocurrió un error: {e}')
+        # El campo 'tipo_registro' no se envía, así que lo eliminamos de la validación
+        if 'tipo_registro' in form.fields:
+            del form.fields['tipo_registro']
+
+        try:
+            with transaction.atomic():
+                # Verificamos si se enviaron datos del formset
+                if 'form-TOTAL_FORMS' in request.POST:
+                    if formset.is_valid():
+                        formset.save()
+                        messages.success(request, 'El desglose por zonas ha sido actualizado.')
+                        return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
+                    else:
+                        messages.error(request, 'Por favor, corrige los errores en el desglose.')
+                else:
+                    if form.is_valid():
+                        avance.avances_por_zona.all().delete()
+                        form.save()
+                        messages.success(request, 'El avance general ha sido actualizado.')
+                        return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
+                    else:
+                        messages.error(request, 'Por favor, corrige los errores en el formulario.')
+        except Exception as e:
+            messages.error(request, f'Ocurrió un error inesperado: {e}')
     else:
         form = AvanceDiarioForm(instance=avance)
-        formset = AvancePorZonaFormSet(instance=avance)
-
+        formset = AvancePorZonaFormSet(queryset=avance.avances_por_zona.all())
+        # Eliminamos el campo que no se usa en la plantilla de edición
+        if 'tipo_registro' in form.fields:
+            del form.fields['tipo_registro']
+    
     contexto = {
         'form': form,
         'formset': formset,
-        'avance': avance
+        'avance': avance,
+        'tiene_desglose': tiene_desglose
     }
     return render(request, 'actividades/editar_avance.html', contexto)
-
 
 # --- Vistas restantes sin cambios ---
 
