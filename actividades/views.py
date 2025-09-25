@@ -6,6 +6,7 @@ from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy
 from datetime import date
 from django.db import IntegrityError, transaction
+from django.core.exceptions import ValidationError # Importar ValidationError
 
 # MODIFICADO: Se importan los nuevos FormSets y modelos.
 from .forms import (
@@ -202,65 +203,88 @@ def registrar_avance(request):
         messages.error(request, 'Error: No hay ningún proyecto registrado en el sistema.')
         return redirect('pagina_principal')
 
-    if request.method == 'POST':
-        form = AvanceDiarioForm(request.POST)
-        formset = AvancePorZonaFormSet(request.POST, queryset=AvancePorZona.objects.none())
+    # Se preparan las instancias del form y formset para ambos casos (GET y POST fallido)
+    form = AvanceDiarioForm()
+    formset = AvancePorZonaFormSet(queryset=AvancePorZona.objects.none())
 
-        if form.is_valid():
-            tipo_registro = form.cleaned_data.get('tipo_registro')
-            
+    if request.method == 'POST':
+        instance = None
+        actividad_id = request.POST.get('actividad')
+        fecha_reporte = request.POST.get('fecha_reporte')
+        empresa_id = request.POST.get('empresa')
+
+        if actividad_id and fecha_reporte and empresa_id:
+            instance = AvanceDiario.objects.filter(
+                actividad_id=actividad_id,
+                fecha_reporte=fecha_reporte,
+                empresa_id=empresa_id
+            ).first()
+
+        form = AvanceDiarioForm(request.POST, instance=instance)
+        formset = AvancePorZonaFormSet(request.POST)
+
+        if form.is_valid() and formset.is_valid():
             try:
                 with transaction.atomic():
-                    avance_diario = form.save(commit=False)
+                    avance_diario = form.save()
+                    tipo_registro = form.cleaned_data.get('tipo_registro')
                     
-                    # Lógica para guardar el desglose por zona
                     if tipo_registro == 'por_zona':
-                        if formset.is_valid() and formset.has_changed():
-                            avance_diario.save() # Guardar el objeto principal para obtener un ID
-                            
-                            # Vincular y guardar cada formulario del formset
-                            instances = formset.save(commit=False)
-                            for instance in instances:
-                                instance.avance_diario = avance_diario
-                                instance.save()
-                            
-                            messages.success(request, '¡Avance por zonas registrado con éxito!')
-                            return redirect('registrar_avance')
-                        else:
-                            # Si el formset no es válido, se muestra el error
-                            messages.error(request, 'Por favor, corrige los errores en el desglose por zonas.')
-                    
-                    # Lógica para guardar el avance general
+                        # Limpiamos el campo general para mantener la consistencia
+                        avance_diario.cantidad_general = None
+                        avance_diario.save(update_fields=['cantidad_general'])
+
+                        # --- LÓGICA ADITIVA ---
+                        # Iteramos sobre los datos limpios del formset
+                        for subform_data in formset.cleaned_data:
+                            # Nos aseguramos de que la fila no esté vacía y tenga datos
+                            if subform_data and subform_data.get('zona') and subform_data.get('cantidad') is not None:
+                                zona = subform_data['zona']
+                                cantidad = subform_data['cantidad']
+                                
+                                # Actualiza la zona si ya existe, o la crea si es nueva.
+                                AvancePorZona.objects.update_or_create(
+                                    avance_diario=avance_diario,
+                                    zona=zona,
+                                    defaults={'cantidad': cantidad}
+                                )
+                        
+                        # Manejamos las filas que el usuario marcó para eliminar en el formset
+                        for form_to_delete in formset.deleted_forms:
+                           if form_to_delete.instance.pk:
+                               form_to_delete.instance.delete()
+                        
+                        messages.success(request, 'Desglose por zonas guardado/actualizado con éxito.')
+
                     else: # tipo_registro == 'general'
-                        avance_diario.save()
-                        messages.success(request, '¡Avance general registrado con éxito!')
-                        return redirect('registrar_avance')
+                        avance_diario.avances_por_zona.all().delete()
+                        messages.success(request, 'Avance general guardado con éxito.')
 
-            except IntegrityError:
-                messages.error(request, 'Error: Ya existe un registro para esta actividad, fecha y empresa.')
+                    return redirect('registrar_avance')
+
             except Exception as e:
-                messages.error(request, f'Ocurrió un error inesperado: {e}')
-    else:
-        form = AvanceDiarioForm()
-        formset = AvancePorZonaFormSet(queryset=AvancePorZona.objects.none())
+                messages.error(request, f"Ocurrió un error inesperado: {e}")
+        else:
+            messages.error(request, 'Por favor, corrige los errores mostrados en el formulario.')
+            if formset.errors:
+                messages.warning(request, f'Errores en el desglose: {formset.non_form_errors() or formset.errors}')
 
-    # Lógica para filtrar actividades (sin cambios)
-    form.fields['actividad'].queryset = Actividad.objects.filter(
-        proyecto=proyecto,
-        sub_actividades__isnull=True
+    # --- Lógica de Contexto (sin cambios) ---
+    actividad_queryset = Actividad.objects.filter(
+        proyecto=proyecto, sub_actividades__isnull=True
     ).order_by('nombre')
     
     partidas = PartidaActividad.objects.all()
     partida_seleccionada_id = request.GET.get('partida_filtro')
     
     if partida_seleccionada_id:
-        form.fields['actividad'].queryset = form.fields['actividad'].queryset.filter(
-            partida_id=partida_seleccionada_id
-        )
+        actividad_queryset = actividad_queryset.filter(partida_id=partida_seleccionada_id)
+
+    form.fields['actividad'].queryset = actividad_queryset
 
     contexto = {
         'form': form,
-        'formset': formset, # Añadir el formset al contexto
+        'formset': formset,
         'proyecto': proyecto,
         'partidas': partidas,
         'partida_seleccionada_id': partida_seleccionada_id,
