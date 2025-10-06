@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Sum
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy
-from datetime import date
+from datetime import date, timedelta 
 from django.db import IntegrityError, transaction
 from django.core.exceptions import ValidationError # Importar ValidationError
 
@@ -32,40 +32,40 @@ def historial_avance_view(request, proyecto_id):
     semanas = Semana.objects.all()
     actividades_filtrables = Actividad.objects.filter(proyecto=proyecto, sub_actividades__isnull=True).order_by('nombre')
     
+    # --- CÁLCULOS PARA LAS TARJETAS (ACUMULATIVO TOTAL HASTA HOY) ---
+    fecha_corte_total = date.today()
+    
+    # 1. PV Acumulado: Valor planeado para todo el proyecto hasta la fecha actual.
+    total_programado_pv_acumulado = proyecto.get_valor_planeado_a_fecha(fecha_corte_total)
+
+    # 2. EV Acumulado: Suma de TODOS los avances reales registrados en la historia del proyecto hasta hoy.
+    avances_totales_acumulados = AvanceDiario.objects.filter(
+        actividad__proyecto=proyecto,
+        fecha_reporte__lte=fecha_corte_total
+    ).prefetch_related('avances_por_zona')
+    total_real_ev_acumulado = sum(avance.cantidad_total for avance in avances_totales_acumulados)
+
+    # 3. SPI Acumulado: El KPI global que coincidirá con Power BI.
+    spi_acumulado = (total_real_ev_acumulado / total_programado_pv_acumulado) if total_programado_pv_acumulado > 0 else 0
+
+    # --- LÓGICA DE FILTRADO SOLO PARA LA TABLA DE ABAJO ---
     semana_seleccionada_id = request.GET.get('semana_filtro')
     actividad_seleccionada_id = request.GET.get('actividad_filtro')
-
-    avances_reales = AvanceDiario.objects.filter(actividad__proyecto=proyecto).select_related('actividad', 'empresa').prefetch_related('avances_por_zona')
     
-    total_programado_pv = 0
-    fecha_corte = date.today()
+    # Empezamos con todos los avances y luego filtramos
+    avances_para_tabla = AvanceDiario.objects.filter(actividad__proyecto=proyecto).select_related('actividad', 'empresa').prefetch_related('avances_por_zona')
     
-    actividad_base_calculo = proyecto
-    actividad_seleccionada = None
-
     if actividad_seleccionada_id:
-        actividad_seleccionada = get_object_or_404(Actividad, pk=actividad_seleccionada_id)
-        avances_reales = avances_reales.filter(actividad=actividad_seleccionada)
-        actividad_base_calculo = actividad_seleccionada
+        avances_para_tabla = avances_para_tabla.filter(actividad_id=actividad_seleccionada_id)
 
+    # Si se selecciona una semana, la tabla muestra esa semana
     if semana_seleccionada_id:
-        try:
-            semana_obj = Semana.objects.get(pk=semana_seleccionada_id)
-            avances_reales = avances_reales.filter(fecha_reporte__range=[semana_obj.fecha_inicio, semana_obj.fecha_fin])
-            total_programado_pv = actividad_base_calculo.get_valor_planeado_en_rango(
-                semana_obj.fecha_inicio, semana_obj.fecha_fin
-            )
-            fecha_corte = semana_obj.fecha_fin
-        except Semana.DoesNotExist:
-            total_programado_pv = actividad_base_calculo.get_valor_planeado_a_fecha(fecha_corte)
+        semana_obj = get_object_or_404(Semana, pk=semana_seleccionada_id)
+        avances_para_tabla = avances_para_tabla.filter(fecha_reporte__range=[semana_obj.fecha_inicio, semana_obj.fecha_fin])
+    # Si no, la tabla muestra las últimas 2 semanas por defecto
     else:
-        total_programado_pv = actividad_base_calculo.get_valor_planeado_a_fecha(fecha_corte)
-
-    # MODIFICADO: El cálculo del total real ahora usa la propiedad `cantidad_total`.
-    # Se realiza en Python porque la propiedad no puede ser agregada directamente en la BD.
-    total_real_ev = sum(avance.cantidad_total for avance in avances_reales)
-    
-    rendimiento_spi = (total_real_ev / total_programado_pv * 100) if total_programado_pv > 0 else 0
+        fecha_inicio_filtro_tabla = date.today() - timedelta(weeks=2)
+        avances_para_tabla = avances_para_tabla.filter(fecha_reporte__gte=fecha_inicio_filtro_tabla)
     
     context = {
         'proyecto': proyecto,
@@ -73,12 +73,15 @@ def historial_avance_view(request, proyecto_id):
         'actividades_filtrables': actividades_filtrables,
         'semana_seleccionada_id': semana_seleccionada_id,
         'actividad_seleccionada_id': actividad_seleccionada_id,
-        'actividad_seleccionada': actividad_seleccionada,
-        'total_programado_pv': total_programado_pv,
-        'total_real_ev': total_real_ev,
-        'rendimiento_spi': rendimiento_spi,
-        'fecha_corte': fecha_corte,
-        'avances_reales': avances_reales.order_by('-fecha_reporte')
+        
+        # Se pasan los valores ACUMULADOS a las tarjetas de resumen
+        'total_programado_pv': total_programado_pv_acumulado,
+        'total_real_ev': total_real_ev_acumulado,
+        'rendimiento_spi': spi_acumulado,
+        'fecha_corte': fecha_corte_total,
+        
+        # La tabla de abajo sigue usando la lista FILTRADA de avances
+        'avances_reales': avances_para_tabla.order_by('-fecha_reporte')
     }
     
     return render(request, 'actividades/historial_avance.html', context)
