@@ -11,7 +11,6 @@
 {% block content %}
     <div class="card">
         <div class="card-header">
-            
             <h1 class="card-title">
                 {% if form.instance.pk %}
                     Editar Actividad: {{ form.instance.nombre }}
@@ -22,15 +21,65 @@
         </div>
         <div class="card-body">
             <p>
-                Rellena los siguientes campos. Para crear una categoría principal como "TERRACERÍAS",
+                Rellena los campos principales de la actividad o categoría. Para crear una categoría principal (ej: "TERRACERÍAS"),
                 deja el campo "Categoría Padre" en blanco.
             </p>
             <hr>
             <form method="post">
                 {% csrf_token %}
-                
+
+                {# Renderizar los campos principales del ActividadForm #}
                 {{ form.as_p }}
-                
+
+                {# --- NUEVO: Renderización del FormSet para Metas por Zona --- #}
+                <h4 class="mt-4">Metas por Zona</h4>
+                <p>Define aquí la meta cuantitativa para cada zona de trabajo aplicable a esta actividad.</p>
+
+                {{ formset.management_form }}
+                {% if formset.non_form_errors %}
+                    <div class="alert alert-danger">{{ formset.non_form_errors|first }}</div>
+                {% endif %}
+
+                <table class="table table-bordered table-striped">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 40%;">Zona</th>
+                            <th style="width: 25%;">Meta</th>
+                            <th style="width: 15%;">Inicio Prog. (Opcional)</th>
+                            <th style="width: 15%;">Fin Prog. (Opcional)</th>
+                            <th>Elim.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for subform in formset %}
+                            <tr class="dynamic-form"> {# Añadir clase para posible JS de añadir/quitar filas #}
+                                <td>
+                                    {{ subform.id }} {# Importante para identificar filas existentes #}
+                                    {{ subform.zona }}
+                                    {% if subform.zona.errors %}<div class="text-danger small mt-1">{{ subform.zona.errors|first }}</div>{% endif %}
+                                </td>
+                                <td>
+                                    {{ subform.meta }}
+                                    {% if subform.meta.errors %}<div class="text-danger small mt-1">{{ subform.meta.errors|first }}</div>{% endif %}
+                                </td>
+                                <td>
+                                    {{ subform.fecha_inicio_programada }}
+                                    {% if subform.fecha_inicio_programada.errors %}<div class="text-danger small mt-1">{{ subform.fecha_inicio_programada.errors|first }}</div>{% endif %}
+                                </td>
+                                <td>
+                                    {{ subform.fecha_fin_programada }}
+                                    {% if subform.fecha_fin_programada.errors %}<div class="text-danger small mt-1">{{ subform.fecha_fin_programada.errors|first }}</div>{% endif %}
+                                </td>
+                                <td>
+                                    {# Mostrar checkbox de eliminación solo si la fila ya existe (tiene PK) #}
+                                    {% if subform.instance.pk %}{{ subform.DELETE }}{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                 {# --- FIN: Renderización del FormSet --- #}
+
                 <div class="mt-4">
                     <button type="submit" class="btn btn-success">Guardar Cambios</button>
                     <a href="{% url 'actividad_list' %}" class="btn btn-secondary">Cancelar</a>
@@ -38,4 +87,7 @@
             </form>
         </div>
     </div>
+
+    {# Opcional: Añadir script JS aquí para manejar la adición/eliminación dinámica de filas del formset si lo necesitas #}
+
 {% endblock %}

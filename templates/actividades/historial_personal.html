@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Historial de Personal del Proyecto: {{ proyecto.nombre }}</h2>
+        <a href="{% url 'registrar_reporte_personal' %}" class="btn btn-primary">Registrar Nuevo Reporte</a>
+    </div>
+
+    {# --- Formulario de Filtros --- #}
+    <form method="get" class="card p-3 mb-4 bg-light">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="semana_filtro" class="form-label">Filtrar por Semana</label>
+                <select name="semana_filtro" id="semana_filtro" class="form-select">
+                    <option value="">Todas las semanas (últimas 2 por defecto)</option>
+                    {% for semana in semanas %}
+                        <option value="{{ semana.pk }}" {% if semana_seleccionada_id == semana.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ semana }} ({{ semana.fecha_inicio|date:"d/m" }} - {{ semana.fecha_fin|date:"d/m" }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="partida_filtro" class="form-label">Filtrar por Partida</label>
+                <select name="partida_filtro" id="partida_filtro" class="form-select">
+                    <option value="">Todas las partidas</option>
+                    {% for partida in partidas %}
+                        <option value="{{ partida.pk }}" {% if partida_seleccionada_id == partida.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ partida.nombre }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="area_filtro" class="form-label">Filtrar por Área</label>
+                <select name="area_filtro" id="area_filtro" class="form-select">
+                    <option value="">Todas las áreas</option>
+                    {% for area in areas %}
+                        <option value="{{ area.pk }}" {% if area_seleccionada_id == area.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ area.nombre }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-success w-100">Filtrar</button>
+            </div>
+        </div>
+    </form>
+
+    {# --- Tabla de Resultados --- #}
+    <div class="card">
+        <div class="card-header">
+            Resumen de Personal
+        </div>
+        <div class="card-body">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Cargo</th>
+                        <th class="text-end">Total de Personal (Suma de Cantidades)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in resumen_personal %}
+                    <tr>
+                        <td>{{ item.cargo__nombre }}</td>
+                        <td class="text-end">{{ item.total_personal }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="2" class="text-center">No se encontraron registros de personal para los filtros seleccionados.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

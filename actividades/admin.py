@@ -43,7 +43,7 @@ class AvancePorZonaInline(admin.TabularInline):
     extra = 1
     autocomplete_fields = ['zona']
 
-# --- Configuraciones Avanzadas (sin cambios, se mantienen como estaban) ---
+# --- Configuraciones Avanzadas (Modificadas) ---
 
 @admin.register(Proyecto)
 class ProyectoAdmin(admin.ModelAdmin):
@@ -52,22 +52,24 @@ class ProyectoAdmin(admin.ModelAdmin):
 
 @admin.register(Actividad)
 class ActividadAdmin(admin.ModelAdmin):
+    # MODIFICADO: Se elimina 'meta_general' de fields.
     fields = (
         'proyecto',
         'partida',
         'padre',
         'nombre',
-        ('meta_general', 'unidad_medida'),
+        'unidad_medida', # 'meta_general' fue quitado de esta tupla
         ('fecha_inicio_programada', 'fecha_fin_programada')
     )
+    # Se mantiene 'meta_total' (propiedad calculada) en list_display
     list_display = ('__str__', 'proyecto', 'partida', 'meta_total')
     list_select_related = ('padre', 'proyecto', 'partida')
     list_filter = ('proyecto', 'partida')
     search_fields = ('nombre', 'padre__nombre')
     autocomplete_fields = ['padre']
     list_per_page = 25
-    inlines = [MetaPorZonaInline]
-    readonly_fields = ('meta_total',)
+    inlines = [MetaPorZonaInline] # El inline para metas por zona es ahora la única forma de ver/editar metas
+    readonly_fields = ('meta_total',) # 'meta_total' sigue siendo readonly
 
 @admin.register(ReportePersonal)
 class ReportePersonalAdmin(admin.ModelAdmin):
@@ -76,11 +78,12 @@ class ReportePersonalAdmin(admin.ModelAdmin):
 
 @admin.register(AvanceDiario)
 class AvanceDiarioAdmin(admin.ModelAdmin):
-    list_display = ('fecha_reporte', 'actividad', 'cantidad_general', 'cantidad_total')
+    # MODIFICADO: Se elimina 'cantidad_general' de list_display. Se mantiene 'cantidad_total'.
+    list_display = ('fecha_reporte', 'actividad', 'cantidad_total') # 'cantidad_general' eliminado
     list_filter = ('fecha_reporte', 'empresa')
     autocomplete_fields = ['actividad']
-    inlines = [AvancePorZonaInline]
-    readonly_fields = ('cantidad_total',)
+    inlines = [AvancePorZonaInline] # El inline es ahora la única forma de ver/editar avances
+    readonly_fields = ('cantidad_total',) # 'cantidad_total' sigue siendo readonly
 
 @admin.register(ReporteDiarioMaquinaria)
 class ReporteDiarioMaquinariaAdmin(admin.ModelAdmin):

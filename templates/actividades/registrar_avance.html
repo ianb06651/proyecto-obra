@@ -8,8 +8,8 @@
         <h2>Registrar Avance para: {{ proyecto.nombre }}</h2>
         <a href="{% url 'historial_avance' proyecto.pk %}" class="btn btn-secondary">Volver al Historial</a>
     </div>
-    
-    <p>Usa este formulario para registrar el avance diario de las actividades.</p>
+
+    <p>Usa este formulario para registrar el avance diario de las actividades, desglosado por zona de trabajo.</p> {# Mensaje actualizado #}
     <hr>
 
     {% if messages %}
@@ -26,7 +26,7 @@
         </div>
         <div class="card-body">
             <form method="get" id="partidaFilterForm">
-                <div class="form-group">
+                <div class="form-group mb-0"> {# Añadido mb-0 para consistencia si solo hay un campo #}
                     <label for="partida_filtro_id">Filtrar por Partida:</label>
                     <select name="partida_filtro" id="partida_filtro_id" class="form-select" onchange="this.form.submit();">
                         <option value="">--- Ver todas las actividades ---</option>
@@ -43,12 +43,13 @@
 
     <div class="card">
         <div class="card-header">
-            <strong>Registrar Avance Diario</strong>
+            <strong>Registrar Avance Diario por Zona</strong> {# Título actualizado #}
         </div>
         <div class="card-body">
             <form method="post">
                 {% csrf_token %}
-                
+
+                {# Campos principales del AvanceDiarioForm #}
                 <div class="mb-3">
                     <label for="{{ form.fecha_reporte.id_for_label }}" class="form-label">{{ form.fecha_reporte.label }}</label>
                     {{ form.fecha_reporte }}
@@ -68,27 +69,17 @@
                     <small class="form-text text-muted">La lista de actividades depende del filtro de partida que elijas arriba.</small>
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label">{{ form.tipo_registro.label }}</label>
-                    <div class="d-flex">
-                    {% for radio in form.tipo_registro %}
-                        <div class="form-check me-3">
-                            {{ radio.tag }}
-                            <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
-                        </div>
-                    {% endfor %}
-                    </div>
-                </div>
+                {# ELIMINADO: Sección de Radio Buttons tipo_registro #}
+                {# <div class="mb-3"> ... radio buttons ... </div> #}
 
-                <div id="general-container" class="mb-3">
-                    <label for="{{ form.cantidad_general.id_for_label }}" class="form-label">Cantidad General</label>
-                    {{ form.cantidad_general }}
-                    {% if form.cantidad_general.errors %}<div class="invalid-feedback d-block">{{ form.cantidad_general.errors|first }}</div>{% endif %}
-                </div>
+                {# ELIMINADO: Contenedor para cantidad_general #}
+                {# <div id="general-container" class="mb-3"> ... </div> #}
 
-                <div id="zonas-container" class="mb-3" style="display: none;">
+                {# MODIFICADO: Contenedor del FormSet de Zonas - Ahora siempre visible #}
+                <div id="zonas-container" class="mb-3"> {# Se eliminó style="display: none;" #}
                     <h5 class="mt-4">Desglose por Zona</h5>
-                    {{ formset.management_form }} {% if formset.non_form_errors %}
+                    {{ formset.management_form }}
+                    {% if formset.non_form_errors %}
                         <div class="alert alert-danger">{{ formset.non_form_errors|first }}</div>
                     {% endif %}
 
@@ -97,14 +88,15 @@
                             <tr>
                                 <th style="width: 50%;">Zona</th>
                                 <th style="width: 40%;">Cantidad</th>
-                                <th>Elim.</th>
+                                <th>Elim.</th> {# Mantener columna Eliminar #}
                             </tr>
                         </thead>
                         <tbody>
                             {% for subform in formset %}
-                                <tr>
+                                <tr class="dynamic-formset-row"> {# Añadir clase para JS si se usa para añadir/quitar filas #}
                                     <td>
-                                        {{ subform.id }} {{ subform.zona }}
+                                        {{ subform.id }} {# Campo oculto ID es importante #}
+                                        {{ subform.zona }}
                                         {% if subform.zona.errors %}<div class="invalid-feedback d-block">{{ subform.zona.errors|first }}</div>{% endif %}
                                     </td>
                                     <td>
@@ -112,47 +104,19 @@
                                         {% if subform.cantidad.errors %}<div class="invalid-feedback d-block">{{ subform.cantidad.errors|first }}</div>{% endif %}
                                     </td>
                                     <td>
-                                        {% if subform.instance.pk %}{{ subform.DELETE }}{% endif %}
+                                        {# Mostrar checkbox DELETE si el formset lo permite y la instancia existe #}
+                                        {% if formset.can_delete and subform.instance.pk %}{{ subform.DELETE }}{% endif %}
                                     </td>
                                 </tr>
                             {% endfor %}
                         </tbody>
                     </table>
+                     {# Opcional: Añadir botón "Añadir Zona" si se implementa JS para formsets dinámicos #}
                 </div>
-                
+
                 <button type="submit" class="btn btn-primary">Guardar Avance</button>
             </form>
         </div>
     </div>
 </div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const tipoRegistroRadios = document.querySelectorAll('input[name="tipo_registro"]');
-        const generalContainer = document.getElementById('general-container');
-        const zonasContainer = document.getElementById('zonas-container');
-
-        function toggleVisibility() {
-            // Busca el radio button que está seleccionado
-            const selectedValue = document.querySelector('input[name="tipo_registro"]:checked').value;
-            
-            if (selectedValue === 'general') {
-                generalContainer.style.display = 'block';
-                zonasContainer.style.display = 'none';
-            } else { // 'por_zona'
-                generalContainer.style.display = 'none';
-                zonasContainer.style.display = 'block';
-            }
-        }
-
-        // Añade un 'listener' a cada radio button para que llame a la función cuando cambie
-        tipoRegistroRadios.forEach(radio => {
-            radio.addEventListener('change', toggleVisibility);
-        });
-
-        // Llama a la función una vez al cargar la página para establecer el estado inicial correcto
-        toggleVisibility();
-    });
-</script>
-
 {% endblock %}

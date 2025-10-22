@@ -1,3 +1,5 @@
+# actividades/forms.py
+
 from django import forms
 from django.forms import modelformset_factory
 from datetime import date
@@ -76,29 +78,21 @@ class MetaPorZonaForm(forms.ModelForm):
 MetaPorZonaFormSet = modelformset_factory(
     MetaPorZona,
     form=MetaPorZonaForm,
-    extra=1,
-    can_delete=True
+    extra=1, # Permitir añadir una nueva zona vacía
+    can_delete=True # Permitir eliminar zonas existentes
 )
 
 class ActividadForm(forms.ModelForm):
-    # NUEVO: Campo para seleccionar el tipo de registro de meta
-    TIPO_REGISTRO_CHOICES = [
-        ('general', 'Registrar Meta General'),
-        ('por_zona', 'Desglosar Meta por Zona'),
-    ]
-    tipo_registro_meta = forms.ChoiceField(
-        choices=TIPO_REGISTRO_CHOICES,
-        widget=forms.RadioSelect,
-        initial='general',
-        label="Tipo de Registro de Meta"
-    )
+    # ELIMINADO: Campo 'tipo_registro_meta' ya no es necesario
+    # TIPO_REGISTRO_CHOICES = [...]
+    # tipo_registro_meta = forms.ChoiceField(...)
 
     class Meta:
         model = Actividad
-        # MODIFICADO: Se cambia 'meta_cantidad_total' por 'meta_general'
-        # y se añade el nuevo campo de control 'tipo_registro_meta'.
+        # MODIFICADO: Se elimina 'tipo_registro_meta' y 'meta_general' de los fields.
+        # Ahora siempre se registrarán las metas por zona a través del FormSet.
         fields = [
-            'nombre', 'padre', 'proyecto', 'partida', 'tipo_registro_meta', 'meta_general',
+            'nombre', 'padre', 'proyecto', 'partida',
             'unidad_medida', 'fecha_inicio_programada', 'fecha_fin_programada'
         ]
         widgets = {
@@ -108,33 +102,35 @@ class ActividadForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Aplica la clase 'form-control' a todos los widgets
         for field_name, field in self.fields.items():
-            existing_classes = field.widget.attrs.get('class', '')
-            field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()
+            # Evita sobreescribir widgets que no son de input estándar (como RadioSelect si lo hubiera)
+            if hasattr(field.widget, 'attrs'):
+                existing_classes = field.widget.attrs.get('class', '')
+                # Asegura no duplicar la clase si ya existe
+                if 'form-control' not in existing_classes:
+                    field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()
 
+        # Establece fechas iniciales solo si es una nueva instancia
         if not self.instance.pk:
-            self.fields['fecha_inicio_programada'].initial = date.today()
-            self.fields['fecha_fin_programada'].initial = date.today()
+            if 'fecha_inicio_programada' in self.fields:
+                self.fields['fecha_inicio_programada'].initial = date.today()
+            if 'fecha_fin_programada' in self.fields:
+                 self.fields['fecha_fin_programada'].initial = date.today()
 
+        # Ajusta el queryset del campo 'padre' para excluirse a sí mismo si se está editando
         if 'padre' in self.fields:
             queryset = Actividad.objects.all()
             if self.instance and self.instance.pk:
-                queryset = queryset.exclude(pk=self.instance.pk)
+                # Excluir la instancia actual y sus descendientes para evitar bucles
+                descendientes_pks = list(self.instance.sub_actividades.values_list('pk', flat=True)) # Simplificado
+                # Podríamos añadir recursión aquí si la jerarquía es profunda, pero por ahora excluimos solo hijos directos
+                pks_a_excluir = [self.instance.pk] + descendientes_pks
+                queryset = queryset.exclude(pk__in=pks_a_excluir)
+
             self.fields['padre'].queryset = queryset.order_by('padre__nombre', 'nombre')
-
-    # NUEVO: Lógica de validación para el modelo híbrido
-    def clean(self):
-        cleaned_data = super().clean()
-        tipo_registro = cleaned_data.get('tipo_registro_meta')
-        meta_general = cleaned_data.get('meta_general')
-
-        if tipo_registro == 'general' and not meta_general:
-            self.add_error('meta_general', "Debe proporcionar una meta general.")
-        
-        if tipo_registro == 'por_zona':
-            cleaned_data['meta_general'] = None
-            
-        return cleaned_data
+            # Opcional: añadir una opción vacía para claridad
+            self.fields['padre'].empty_label = "--- Ninguna (Categoría Raíz) ---"
 
 # --- 2. Formularios para el modelo AvanceDiario ---
 
@@ -143,63 +139,53 @@ class AvancePorZonaForm(forms.ModelForm):
     class Meta:
         model = AvancePorZona
         fields = ['zona', 'cantidad']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['zona'].widget.attrs.update({'class': 'form-control'})
-        self.fields['cantidad'].widget.attrs.update({'class': 'form-control'})
+        widgets = { # Asegurar que los widgets tengan la clase correcta
+            'zona': forms.Select(attrs={'class': 'form-control'}),
+            'cantidad': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
 
 # FormSet para manejar múltiples avances por zona en un día
 AvancePorZonaFormSet = modelformset_factory(
     AvancePorZona,
     form=AvancePorZonaForm,
-    extra=1,
-    can_delete=True
+    extra=1, # Permitir añadir una nueva zona vacía
+    can_delete=True # Permitir eliminar zonas existentes
 )
 
 class AvanceDiarioForm(forms.ModelForm):
-    # NUEVO: Campo para seleccionar el tipo de registro de avance
-    TIPO_REGISTRO_CHOICES = [
-        ('general', 'Registrar Avance General'),
-        ('por_zona', 'Desglosar Avance por Zona'),
-    ]
-    tipo_registro = forms.ChoiceField(
-        choices=TIPO_REGISTRO_CHOICES,
-        widget=forms.RadioSelect,
-        initial='general',
-        label="Tipo de Registro de Avance"
-    )
+    # ELIMINADO: Campo 'tipo_registro' ya no es necesario
+    # TIPO_REGISTRO_CHOICES = [...]
+    # tipo_registro = forms.ChoiceField(...)
 
     class Meta:
         model = AvanceDiario
-        # MODIFICADO: Se eliminó 'zonas' y se cambió 'cantidad_realizada_dia'
-        # por 'cantidad_general'. Se añade 'tipo_registro'.
-        fields = ['actividad', 'fecha_reporte', 'empresa', 'tipo_registro', 'cantidad_general']
+        # MODIFICADO: Se elimina 'tipo_registro' y 'cantidad_general'.
+        # Ahora siempre se registrará el avance por zonas usando el FormSet.
+        fields = ['actividad', 'fecha_reporte', 'empresa']
         widgets = {
             'fecha_reporte': forms.DateInput(attrs={'type': 'date'}),
         }
 
     def __init__(self, *args, **kwargs):
+        # Tomamos el queryset filtrado como argumento extra
+        actividad_queryset = kwargs.pop('actividad_queryset', None)
         super().__init__(*args, **kwargs)
+
+        # Establece fecha inicial solo si es nuevo
         if not self.instance.pk and 'fecha_reporte' in self.fields:
             self.fields['fecha_reporte'].initial = date.today()
 
+        # Aplica clase 'form-control' a todos los campos
         for field_name, field in self.fields.items():
             if hasattr(field.widget, 'attrs'):
                 existing_classes = field.widget.attrs.get('class', '')
                 if 'form-control' not in existing_classes:
-                    field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()
+                     field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()
 
-    # NUEVO: Lógica de validación para el modelo híbrido
-    def clean(self):
-        cleaned_data = super().clean()
-        tipo_registro = cleaned_data.get('tipo_registro')
-        cantidad_general = cleaned_data.get('cantidad_general')
-
-        if tipo_registro == 'general' and not cantidad_general:
-            self.add_error('cantidad_general', "Debe proporcionar una cantidad general.")
-
-        if tipo_registro == 'por_zona':
-            cleaned_data['cantidad_general'] = None
-            
-        return cleaned_data
+        # Si se proporcionó un queryset filtrado para 'actividad', lo usamos
+        if actividad_queryset is not None:
+            self.fields['actividad'].queryset = actividad_queryset
+        elif 'actividad' in self.fields: # Asegurar que el campo exista
+             # Por defecto, filtramos para mostrar solo actividades 'hoja' (sin hijos)
+             # Esto debería ajustarse según la lógica de negocio (¿se puede reportar avance en categorías padre?)
+             self.fields['actividad'].queryset = Actividad.objects.filter(sub_actividades__isnull=True).order_by('nombre')

@@ -100,14 +100,16 @@ class MetaPorZona(models.Model):
         if fecha_corte >= fecha_fin:
             return self.meta
 
-        dias_totales = sum(1 for i in range((fecha_fin - fecha_inicio).days + 1) if (fecha_inicio + timedelta(days=i)).weekday() != 6)
+        # Corrección: Contar días laborables (excluyendo Domingos)
+        dias_totales = sum(1 for i in range((fecha_fin - fecha_inicio).days + 1) if (fecha_inicio + timedelta(days=i)).weekday() != 6) # 6 = Domingo
         if dias_totales == 0:
             return 0
-        
+
         meta_diaria_zona = self.meta / dias_totales
 
+        # Corrección: Contar días laborables transcurridos
         dias_transcurridos = sum(1 for i in range((fecha_corte - fecha_inicio).days + 1) if (fecha_inicio + timedelta(days=i)).weekday() != 6)
-        
+
         return round(dias_transcurridos * meta_diaria_zona, 2)
 
 # --- NUEVO MODELO INTERMEDIO PARA AVANCES POR ZONA ---
@@ -132,14 +134,9 @@ class Actividad(models.Model):
     )
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='actividades')
     partida = models.ForeignKey(PartidaActividad, on_delete=models.PROTECT, null=True, blank=True)
-    
-    # --- MODIFICACIÓN: Campo para meta general ---
-    # Renombrado de 'meta_cantidad_total' a 'meta_general'
-    # Se hace nullable para indicar que puede no usarse si hay desglose por zona.
-    meta_general = models.DecimalField(
-        _("Meta General"), max_digits=12, decimal_places=2, null=True, blank=True,
-        help_text="Usar si la meta no se desglosa por zona. Ej: 66470"
-    )
+
+    # --- CAMBIO: Campo 'meta_general' eliminado ---
+    # meta_general = models.DecimalField(...) # ELIMINADO
 
     # --- NUEVO: Relación ManyToMany para metas por zona ---
     zonas_meta = models.ManyToManyField(
@@ -148,24 +145,22 @@ class Actividad(models.Model):
         related_name='actividades_meta',
         verbose_name=_("Desglose de Metas por Zona")
     )
-    
+
     unidad_medida = models.CharField(_("Unidad de Medida"), max_length=50, blank=True, help_text="Ej: m3, Ton, Pza")
     fecha_inicio_programada = models.DateField(null=True, blank=True)
     fecha_fin_programada = models.DateField(null=True, blank=True)
-    
-    # --- NUEVO: Propiedad para calcular la meta total dinámicamente ---
+
+    # --- MODIFICADO: Propiedad para calcular la meta total dinámicamente ---
     @property
     def meta_total(self):
         """
-        Calcula la meta total. Suma las metas por zona si existen,
-        de lo contrario, devuelve la meta general.
+        Calcula la meta total sumando las metas por zona.
         """
         # Usamos 'metas_por_zona' (related_name del FK en MetaPorZona)
         metas_zonas = self.metas_por_zona.all()
-        if metas_zonas.exists():
-            total = metas_zonas.aggregate(total=Sum('meta'))['total']
-            return total or 0
-        return self.meta_general or 0
+        # Ahora siempre suma las metas por zona, o devuelve 0 si no hay ninguna.
+        total = metas_zonas.aggregate(total=Sum('meta'))['total']
+        return total or 0
 
     # (Lógica existente de la clase sin cambios)
     @cached_property
@@ -173,69 +168,91 @@ class Actividad(models.Model):
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.cantidad_total_calculada for sub in sub_actividades)
-        # NOTA: La lógica original usaba meta_cantidad_total. Ahora usará la propiedad meta_total.
+        # NOTA: Ahora siempre usará la propiedad meta_total (que suma las zonas).
         return self.meta_total
 
     @cached_property
     def dias_laborables_totales(self):
         if not self.fecha_inicio_programada or not self.fecha_fin_programada:
             return 0
-        return sum(1 for i in range((self.fecha_fin_programada - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
+        # Corrección: Contar días laborables (excluyendo Domingos)
+        return sum(1 for i in range((self.fecha_fin_programada - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6) # 6 = Domingo
 
     @cached_property
     def meta_diaria(self):
-        if self.dias_laborables_totales == 0:
+        dias_totales = self.dias_laborables_totales # Usar la propiedad corregida
+        if dias_totales == 0:
             return 0
         # NOTA: Usa la nueva propiedad meta_total para el cálculo
-        return self.meta_total / self.dias_laborables_totales
+        return self.meta_total / dias_totales
 
     def get_pv_diario(self, fecha: date):
-        if self.sub_actividades.exists(): return 0
-        if not all([self.fecha_inicio_programada, self.fecha_fin_programada, self.meta_total > 0]): return 0
-        if not (self.fecha_inicio_programada <= fecha <= self.fecha_fin_programada) or fecha.weekday() == 6: return 0
-        return round(self.meta_diaria, 2)
+        # Primero, manejamos las actividades que son 'padre' (agrupadoras)
+        sub_actividades = self.sub_actividades.all()
+        if sub_actividades.exists():
+            # Si es padre, el PV diario se calcula sumando el de sus hijos (si los tiene)
+            # o si no, se calcula basado en sus propias metas por zona (o meta general antes).
+            # Para simplificar y evitar doble cálculo, asumimos que un padre NO tiene metas propias.
+            # Su PV diario es 0; el PV total se obtiene de la suma en get_valor_planeado...
+            return 0
 
-    # actividades/models.py -> dentro de la clase Actividad
+        # --- LÓGICA REESCRITA (para actividades hoja) ---
+        total_pv_diario_zonas = 0
+        metas_por_zona = self.metas_por_zona.all()
+
+        if metas_por_zona.exists():
+            for meta_zona in metas_por_zona:
+                fecha_inicio_zona = meta_zona.fecha_inicio_programada or self.fecha_inicio_programada
+                fecha_fin_zona = meta_zona.fecha_fin_programada or self.fecha_fin_programada
+
+                if not fecha_inicio_zona or not fecha_fin_zona:
+                    continue # Saltar si la zona no tiene fechas válidas
+
+                # Verificar si la fecha dada está dentro del rango de la zona y no es domingo
+                if (fecha_inicio_zona <= fecha <= fecha_fin_zona) and fecha.weekday() != 6: # 6 = Domingo
+                    dias_totales_zona = sum(1 for i in range((fecha_fin_zona - fecha_inicio_zona).days + 1) if (fecha_inicio_zona + timedelta(days=i)).weekday() != 6)
+                    if dias_totales_zona > 0:
+                        meta_diaria_zona = meta_zona.meta / dias_totales_zona
+                        total_pv_diario_zonas += meta_diaria_zona
+            return round(total_pv_diario_zonas, 2)
+        else:
+            # Si no hay desglose por zonas, no hay meta, PV diario es 0.
+            return 0
+
 
     def get_valor_planeado_a_fecha(self, fecha_corte: date):
-        # Primero, manejamos las actividades que son 'padre' (agrupadoras)
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.get_valor_planeado_a_fecha(fecha_corte) for sub in sub_actividades)
 
-        # --- LÓGICA REESCRITA ---
+        # --- LÓGICA REESCRITA (Ahora solo considera metas por zona) ---
         metas_por_zona = self.metas_por_zona.all()
 
-        # CASO 1: La actividad tiene desglose por zonas
         if metas_por_zona.exists():
             total_pv_zonas = 0
-            # Iteramos sobre cada meta de zona y calculamos su PV individualmente
             for meta_zona in metas_por_zona:
                 total_pv_zonas += meta_zona.get_valor_planeado_individual(fecha_corte)
             return total_pv_zonas
-
-        # CASO 2: La actividad NO tiene desglose (comportamiento antiguo)
         else:
-            if not self.fecha_inicio_programada: return 0
-            if fecha_corte < self.fecha_inicio_programada: return 0
-            # Usamos meta_total para ser consistentes, aunque aquí será igual a meta_general
-            if fecha_corte >= self.fecha_fin_programada: return self.meta_total
-
-            dias_laborables_transcurridos = sum(1 for i in range((fecha_corte - self.fecha_inicio_programada).days + 1) if (self.fecha_inicio_programada + timedelta(days=i)).weekday() != 6)
-            
-            # Usamos la propiedad meta_diaria que ya calcula en base a meta_total
-            return round(dias_laborables_transcurridos * self.meta_diaria, 2)
+             # Si no hay desglose por zonas, el PV es 0
+            return 0
 
     def get_valor_planeado_en_rango(self, fecha_inicio_rango: date, fecha_fin_rango: date):
         sub_actividades = self.sub_actividades.all()
         if sub_actividades.exists():
             return sum(sub.get_valor_planeado_en_rango(fecha_inicio_rango, fecha_fin_rango) for sub in sub_actividades)
-        if not self.fecha_inicio_programada or not self.fecha_fin_programada: return 0
-        fecha_inicio_calculo = max(self.fecha_inicio_programada, fecha_inicio_rango)
-        fecha_fin_calculo = min(self.fecha_fin_programada, fecha_fin_rango)
-        if fecha_fin_calculo < fecha_inicio_calculo: return 0
-        total_pv_rango = sum(self.get_pv_diario(fecha_inicio_calculo + timedelta(days=i)) for i in range((fecha_fin_calculo - fecha_inicio_calculo).days + 1))
+
+        # --- LÓGICA REESCRITA (Suma los PV diarios calculados) ---
+        total_pv_rango = 0
+        # Iteramos CADA día dentro del rango solicitado
+        current_date = fecha_inicio_rango
+        while current_date <= fecha_fin_rango:
+             # Y sumamos el PV diario calculado para ese día específico
+            total_pv_rango += self.get_pv_diario(current_date)
+            current_date += timedelta(days=1)
+
         return round(total_pv_rango, 2)
+
 
     class Meta:
         verbose_name = "Actividad (WBS)"
@@ -264,14 +281,10 @@ class ReportePersonal(models.Model):
 class AvanceDiario(models.Model):
     actividad = models.ForeignKey(Actividad, on_delete=models.CASCADE, related_name="avances")
     fecha_reporte = models.DateField()
-    
-    # --- MODIFICACIÓN: Campo para avance general ---
-    # Renombrado de 'cantidad_realizada_dia' a 'cantidad_general'
-    # Se hace nullable para que sea opcional si se usa el desglose por zona.
-    cantidad_general = models.DecimalField(
-        _("Cantidad General"), max_digits=12, decimal_places=2, null=True, blank=True
-    )
-    
+
+    # --- CAMBIO: Campo 'cantidad_general' eliminado ---
+    # cantidad_general = models.DecimalField(...) # ELIMINADO
+
     empresa = models.ForeignKey(
         Empresa,
         on_delete=models.PROTECT,
@@ -287,23 +300,22 @@ class AvanceDiario(models.Model):
         related_name='avances_diarios',
         verbose_name=_("Desglose de Avance por Zona")
     )
-    
-    # --- NUEVO: Propiedad para calcular la cantidad total dinámicamente ---
+
+    # --- MODIFICADO: Propiedad para calcular la cantidad total dinámicamente ---
     @property
     def cantidad_total(self):
         """
-        Calcula la cantidad total del avance. Suma las cantidades por zona si existen,
-        de lo contrario, devuelve la cantidad general.
+        Calcula la cantidad total del avance sumando las cantidades por zona.
         """
         # Usamos 'avances_por_zona' (related_name del FK en AvancePorZona)
         avances_zonas = self.avances_por_zona.all()
-        if avances_zonas.exists():
-            total = avances_zonas.aggregate(total=Sum('cantidad'))['total']
-            return total or 0
-        return self.cantidad_general or 0
+        # Ahora siempre suma los avances por zona, o devuelve 0 si no hay ninguno.
+        total = avances_zonas.aggregate(total=Sum('cantidad'))['total']
+        return total or 0
 
     @property
     def cantidad_programada_dia(self):
+         # Llama al método get_pv_diario que ya fue ajustado
         return self.actividad.get_pv_diario(self.fecha_reporte)
 
     class Meta:
@@ -311,9 +323,9 @@ class AvanceDiario(models.Model):
         unique_together = ('actividad', 'fecha_reporte', 'empresa')
 
     def __str__(self):
-        if hasattr(self, 'empresa') and self.empresa:
-            return f"Avance de {self.actividad.nombre} por {self.empresa.nombre} en {self.fecha_reporte}"
-        return f"Avance de {self.actividad.nombre} en {self.fecha_reporte}"
+        # Asegurarse de que empresa esté cargada para evitar consultas adicionales
+        empresa_nombre = self.empresa.nombre if hasattr(self, 'empresa') and self.empresa else "N/A"
+        return f"Avance de {self.actividad.nombre} por {empresa_nombre} en {self.fecha_reporte}"
 
 
 class ReporteDiarioMaquinaria(models.Model):
@@ -335,7 +347,8 @@ class ReporteDiarioMaquinaria(models.Model):
     def __str__(self):
         return f"{self.tipo_maquinaria} - {self.fecha}"
     def clean(self):
-        if self.cantidad_activa + self.cantidad_inactiva != self.cantidad_total:
+        if (self.cantidad_activa is not None and self.cantidad_inactiva is not None and self.cantidad_total is not None and
+                self.cantidad_activa + self.cantidad_inactiva != self.cantidad_total):
             raise ValidationError("La suma de la cantidad activa e inactiva debe ser igual a la cantidad total.")
 
 class ReporteClima(models.Model):
