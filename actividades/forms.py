@@ -4,12 +4,12 @@ from django import forms
 from django.forms import modelformset_factory
 from datetime import date
 from .models import (
-    # Modelos existentes
     ReporteDiarioMaquinaria, ReportePersonal, Actividad,
     PartidaActividad, AvanceDiario, ReporteClima,
-    # Nuevos modelos para el desglose
-    MetaPorZona, AvancePorZona
+    MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
+    ElementoConstructivo, AvanceProcesoElemento
 )
+from django.forms import modelformset_factory, inlineformset_factory
 
 # --- Formularios sin cambios ---
 class ReporteMaquinariaForm(forms.ModelForm):
@@ -189,3 +189,29 @@ class AvanceDiarioForm(forms.ModelForm):
              # Por defecto, filtramos para mostrar solo actividades 'hoja' (sin hijos)
              # Esto debería ajustarse según la lógica de negocio (¿se puede reportar avance en categorías padre?)
              self.fields['actividad'].queryset = Actividad.objects.filter(sub_actividades__isnull=True).order_by('nombre')
+             
+             
+# --- FORMULARIOS PARA REGISTRO DE AVANCE BIM ---
+
+class SeleccionarElementoForm(forms.Form):
+    """ Formulario simple para seleccionar el Elemento Constructivo con autocompletado. """
+    elemento = forms.ModelChoiceField(
+        queryset=ElementoConstructivo.objects.all(),
+        label=("Seleccionar Elemento Constructivo"),
+        widget=forms.Select(attrs={'class': 'form-select', 'id': 'elemento-select-bim'}), # ID para JS
+        help_text=("Escribe parte del identificador para buscar.")
+    )
+
+class AvanceProcesoElementoForm(forms.ModelForm):
+    """ Formulario base para un registro individual de avance de proceso. """
+    # Hacemos la fecha no requerida en el modelo base, la validación se hará en la vista/JS
+    fecha_finalizacion = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'})
+    )
+
+    class Meta:
+        model = AvanceProcesoElemento
+        fields = ['paso_proceso', 'fecha_finalizacion']
+        # Ocultamos el campo paso_proceso, lo manejaremos programáticamente
+        widgets = {'paso_proceso': forms.HiddenInput()}

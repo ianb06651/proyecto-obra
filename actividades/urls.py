@@ -27,4 +27,15 @@ urlpatterns = [
     # --- URL PARA EL HISTORIAL UNIFICADO ---
     # Esta URL sí necesita el ID para saber qué historial mostrar
     path('proyecto/<int:proyecto_id>/historial/', views.historial_avance_view, name='historial_avance'),
+    
+    # --- URLs PARA REGISTRO DE AVANCE BIM ---
+    path('bim/registrar/', views.registrar_avance_bim, name='registrar_avance_bim'),
+
+    # --- URLs DE API PARA FORMULARIO DINÁMICO ---
+    path('api/buscar-elementos/',
+         views.buscar_elementos_constructivos,
+         name='api_buscar_elementos'),
+    path('api/elemento/<int:elemento_id>/pasos/',
+         views.obtener_pasos_y_avance_elemento,
+         name='api_obtener_pasos'),
 ]

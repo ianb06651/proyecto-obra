@@ -5,7 +5,8 @@ from .models import (
     PartidaActividad, PartidaPersonal,
     Actividad, ReportePersonal, AvanceDiario, TipoMaquinaria,
     ReporteDiarioMaquinaria, ReporteClima, Proyecto,
-    MetaPorZona, AvancePorZona
+    MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
+    ElementoConstructivo, AvanceProcesoElemento
 )
 
 # --- Registros de Catálogos ---
@@ -89,3 +90,44 @@ class AvanceDiarioAdmin(admin.ModelAdmin):
 class ReporteDiarioMaquinariaAdmin(admin.ModelAdmin):
     list_display = ('fecha', 'tipo_maquinaria', 'partida', 'empresa', 'cantidad_total', 'cantidad_activa')
     list_filter = ('fecha', 'empresa', 'partida', 'tipo_maquinaria')
+
+@admin.register(ProcesoConstructivo)
+class ProcesoConstructivoAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'descripcion')
+    search_fields = ('nombre',)
+
+class PasoProcesoTipoElementoInline(admin.TabularInline):
+    """ Permite definir los pasos directamente al crear/editar un TipoElemento """
+    model = PasoProcesoTipoElemento
+    extra = 1
+    ordering = ('orden',)
+    autocomplete_fields = ['proceso'] # Asume que ProcesoConstructivoAdmin tiene search_fields
+
+@admin.register(TipoElemento) # Re-registrar TipoElemento para añadir el inline
+class TipoElementoConPasosAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'descripcion')
+    search_fields = ('nombre',)
+    inlines = [PasoProcesoTipoElementoInline]
+
+@admin.register(PasoProcesoTipoElemento)
+class PasoProcesoTipoElementoAdmin(admin.ModelAdmin):
+    list_display = ('tipo_elemento', 'orden', 'proceso')
+    list_filter = ('tipo_elemento',)
+    search_fields = ('proceso__nombre',)
+    autocomplete_fields = ['tipo_elemento', 'proceso']
+    list_editable = ('orden',)
+
+@admin.register(ElementoConstructivo)
+class ElementoConstructivoAdmin(admin.ModelAdmin):
+    list_display = ('identificador_unico', 'tipo_elemento', 'descripcion')
+    list_filter = ('tipo_elemento',)
+    search_fields = ('identificador_unico', 'descripcion') # ¡Importante para la búsqueda!
+    autocomplete_fields = ['tipo_elemento']
+
+@admin.register(AvanceProcesoElemento)
+class AvanceProcesoElementoAdmin(admin.ModelAdmin):
+    list_display = ('elemento', 'paso_proceso', 'fecha_finalizacion')
+    list_filter = ('paso_proceso__tipo_elemento', 'fecha_finalizacion')
+    search_fields = ('elemento__identificador_unico', 'paso_proceso__proceso__nombre')
+    autocomplete_fields = ['elemento', 'paso_proceso']
+    date_hierarchy = 'fecha_finalizacion' # Facilita la navegación por fechas

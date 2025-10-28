@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 from django.db.models import Sum
 from functools import cached_property
+from django.db.models import Max
 
 # --- CATÁLOGOS ---
 # (Sin cambios en Empresa, Cargo, Semana, Proyecto, Partidas, TipoMaquinaria)
@@ -368,3 +369,102 @@ class ReporteClima(models.Model):
         ordering = ['-fecha']
     def __str__(self):
         return f"Clima del {self.fecha}"
+    
+    
+class TipoElemento(models.Model):
+    """ Catálogo de tipos generales de elementos constructivos. Ej: Zapatas, Columnas."""
+    nombre = models.CharField(_("Nombre del Tipo de Elemento"), max_length=100, unique=True)
+    descripcion = models.TextField(_("Descripción"), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _("Tipo de Elemento Constructivo")
+        verbose_name_plural = _("Tipos de Elementos Constructivos")
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+class ProcesoConstructivo(models.Model):
+    """ Catálogo maestro de todos los pasos individuales posibles. Ej: Excavación, Armado."""
+    nombre = models.CharField(_("Nombre del Proceso"), max_length=100, unique=True)
+    descripcion = models.TextField(_("Descripción"), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _("Proceso Constructivo")
+        verbose_name_plural = _("Procesos Constructivos")
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+class PasoProcesoTipoElemento(models.Model):
+    """ Define la secuencia ordenada ('receta') de Procesos para cada TipoElemento."""
+    tipo_elemento = models.ForeignKey(TipoElemento, on_delete=models.CASCADE, related_name='pasos_proceso')
+    proceso = models.ForeignKey(ProcesoConstructivo, on_delete=models.PROTECT)
+    orden = models.PositiveIntegerField(_("Orden en la Secuencia"))
+
+    class Meta:
+        verbose_name = _("Paso de Proceso por Tipo")
+        verbose_name_plural = _("Pasos de Proceso por Tipo")
+        # Asegura que un proceso no se repita para el mismo tipo y orden
+        unique_together = ('tipo_elemento', 'proceso', 'orden')
+        ordering = ['tipo_elemento', 'orden']
+
+    def __str__(self):
+        return f"{self.tipo_elemento.nombre} - Paso {self.orden}: {self.proceso.nombre}"
+
+    # Podríamos añadir un método clean() aquí para asegurar que el orden sea único por tipo_elemento si es necesario.
+
+class ElementoConstructivo(models.Model):
+    """ Representa cada objeto físico individual en la obra. Ej: Zapata Z-10."""
+    identificador_unico = models.CharField(
+        _("Identificador Único (BIM ID)"),
+        max_length=255,
+        unique=True, # ¡Muy importante para la conexión BIM!
+        db_index=True, # Indexar para búsquedas rápidas
+        help_text=_("El ID único que coincide con el modelo BIM (Navisworks/Revit).")
+    )
+    tipo_elemento = models.ForeignKey(TipoElemento, on_delete=models.PROTECT, related_name='elementos')
+    descripcion = models.CharField(_("Descripción Adicional"), max_length=255, blank=True, null=True)
+    # Podrías añadir más campos relevantes aquí, como ubicación, nivel, etc.
+    # zona = models.ForeignKey(AreaDeTrabajo, ...) # Si aplica
+
+    class Meta:
+        verbose_name = _("Elemento Constructivo")
+        verbose_name_plural = _("Elementos Constructivos")
+        ordering = ['identificador_unico']
+
+    def __str__(self):
+        return self.identificador_unico
+
+class AvanceProcesoElemento(models.Model):
+    """ Registra la fecha de finalización de un Paso específico para un Elemento."""
+    elemento = models.ForeignKey(ElementoConstructivo, on_delete=models.CASCADE, related_name='avances_proceso')
+    paso_proceso = models.ForeignKey(PasoProcesoTipoElemento, on_delete=models.PROTECT)
+    fecha_finalizacion = models.DateField(_("Fecha de Finalización"))
+    # usuario_registro = models.ForeignKey(User, ...)
+    # observaciones = models.TextField(...)
+
+    class Meta:
+        verbose_name = _("Avance de Proceso por Elemento")
+        verbose_name_plural = _("Avances de Proceso por Elemento")
+        # Un elemento solo puede tener una fecha para un paso específico
+        unique_together = ('elemento', 'paso_proceso')
+        ordering = ['elemento', 'paso_proceso__orden']
+
+    def __str__(self):
+        return f"{self.elemento.identificador_unico} - {self.paso_proceso.proceso.nombre}: {self.fecha_finalizacion}"
+
+    def clean(self):
+        # Validación para asegurar que el paso_proceso sea compatible con el tipo del elemento
+        if self.elemento_id and self.paso_proceso_id:
+            if self.paso_proceso.tipo_elemento != self.elemento.tipo_elemento:
+                raise ValidationError(
+                    _("El paso de proceso seleccionado ('%(paso)s') no pertenece al tipo de elemento ('%(tipo_elemento)s') de este elemento constructivo."),
+                    code='paso_incompatible',
+                    params={'paso': self.paso_proceso, 'tipo_elemento': self.elemento.tipo_elemento},
+                )
+        if self.fecha_finalizacion and self.fecha_finalizacion > date.today():
+             raise ValidationError(
+                 _("La fecha de finalización no puede ser una fecha futura."), code='fecha_futura'
+             )

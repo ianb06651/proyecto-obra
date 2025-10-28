@@ -1,11 +1,12 @@
 # actividades/views.py
-
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Sum
 from django.views.generic import ListView, CreateView, UpdateView
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from datetime import date, timedelta
 from django.db import IntegrityError, transaction
 from django.core.exceptions import ValidationError # Importar ValidationError
@@ -13,13 +14,14 @@ from django.core.exceptions import ValidationError # Importar ValidationError
 from .forms import (
     ReporteMaquinariaForm, ReportePersonalForm, ActividadForm,
     ConsultaClimaForm, AvanceDiarioForm, AvancePorZonaFormSet,
-    MetaPorZonaFormSet
+    MetaPorZonaFormSet, SeleccionarElementoForm
 )
 from .services import obtener_y_guardar_clima
 from .models import (
     Actividad, AvanceDiario, Semana, PartidaActividad, ReportePersonal,
     Empresa, Cargo, AreaDeTrabajo, ReporteDiarioMaquinaria, Proyecto,
-    AvancePorZona, MetaPorZona
+    AvancePorZona, MetaPorZona, ElementoConstructivo, 
+    PasoProcesoTipoElemento, AvanceProcesoElemento, TipoElemento
 )
 
 # --- Vistas sin cambios funcionales directos ---
@@ -447,3 +449,151 @@ def vista_clima(request):
 
     contexto = {'form': form, 'reporte': reporte}
     return render(request, 'actividades/vista_clima.html', contexto)
+
+# --- VISTAS DE API PARA FORMULARIO BIM DINÁMICO ---
+
+@require_GET # Solo permitir peticiones GET
+def buscar_elementos_constructivos(request):
+    """ API endpoint para buscar Elementos Constructivos por identificador_unico. """
+    query = request.GET.get('term', '') # 'term' es usado comúnmente por widgets de autocompletado
+    if len(query) < 2: # No buscar si el término es muy corto (optimización)
+        return JsonResponse([], safe=False)
+
+    elementos = ElementoConstructivo.objects.filter(
+        identificador_unico__icontains=query
+    )[:10] # Limitar a 10 resultados
+
+    resultados = [
+        {'id': el.id, 'text': el.identificador_unico} # Formato esperado por Select2/TomSelect
+        for el in elementos
+    ]
+    return JsonResponse(resultados, safe=False)
+
+@require_GET # Solo permitir peticiones GET
+def obtener_pasos_y_avance_elemento(request, elemento_id):
+    """
+    API endpoint para obtener los pasos definidos para el tipo de un elemento
+    y las fechas de avance ya registradas para ese elemento específico.
+    """
+    try:
+        elemento = ElementoConstructivo.objects.select_related('tipo_elemento').get(pk=elemento_id)
+    except ElementoConstructivo.DoesNotExist:
+        return JsonResponse({'error': 'Elemento no encontrado'}, status=404)
+
+    # Obtener los pasos definidos para el TipoElemento de este elemento
+    pasos_definidos = PasoProcesoTipoElemento.objects.filter(
+        tipo_elemento=elemento.tipo_elemento
+    ).select_related('proceso').order_by('orden')
+
+    # Obtener los avances ya registrados para este elemento específico
+    avances_registrados = AvanceProcesoElemento.objects.filter(
+        elemento=elemento
+    ).values('paso_proceso_id', 'fecha_finalizacion') # Obtener solo ID y fecha
+
+    # Crear un diccionario para mapear paso_id -> fecha
+    mapa_avances = {avance['paso_proceso_id']: avance['fecha_finalizacion'].strftime('%Y-%m-%d')
+                    for avance in avances_registrados if avance['fecha_finalizacion']}
+
+    # Construir la respuesta
+    pasos_data = []
+    for paso in pasos_definidos:
+        pasos_data.append({
+            'paso_id': paso.id,
+            'nombre_proceso': paso.proceso.nombre,
+            'orden': paso.orden,
+            'fecha_guardada': mapa_avances.get(paso.id, None) # Obtener fecha si existe, si no None
+        })
+
+    return JsonResponse({'pasos': pasos_data})
+
+# --- VISTA PRINCIPAL PARA REGISTRO DE AVANCE BIM ---
+
+# @login_required # Podrías requerir login
+def registrar_avance_bim(request):
+    """ Vista para seleccionar un elemento y registrar/editar sus fechas de avance. """
+    if request.method == 'POST':
+        # --- Lógica de Guardado ---
+        elemento_id = request.POST.get('elemento_id_hidden') # Campo oculto que pondremos en el template
+        if not elemento_id:
+            messages.error(request, ("No se seleccionó ningún elemento constructivo."))
+            return redirect('registrar_avance_bim') # Redirigir a la misma página
+
+        try:
+            elemento = ElementoConstructivo.objects.get(pk=elemento_id)
+        except ElementoConstructivo.DoesNotExist:
+            messages.error(request, ("El elemento constructivo seleccionado ya no existe."))
+            return redirect('registrar_avance_bim')
+
+        # Procesar las fechas enviadas para cada paso
+        pasos_ids_enviados = request.POST.getlist('paso_id') # Lista de IDs de los pasos mostrados
+        fechas_enviadas = request.POST.getlist('fecha_finalizacion') # Lista de fechas correspondientes
+
+        if len(pasos_ids_enviados) != len(fechas_enviadas):
+             messages.error(request, ("Error en los datos enviados. Inténtalo de nuevo."))
+             return redirect('registrar_avance_bim') # O renderizar con errores
+
+        errores_guardado = []
+        try:
+            with transaction.atomic(): # Asegurar que todos los guardados/borrados sean atómicos
+                for paso_id_str, fecha_str in zip(pasos_ids_enviados, fechas_enviadas):
+                    try:
+                        paso_id = int(paso_id_str)
+                        paso = PasoProcesoTipoElemento.objects.get(pk=paso_id, tipo_elemento=elemento.tipo_elemento)
+
+                        if fecha_str: # Si se proporcionó una fecha
+                            try:
+                                fecha_obj = date.fromisoformat(fecha_str)
+                                if fecha_obj > date.today():
+                                     raise ValidationError(("La fecha para '%(paso)s' no puede ser futura.") % {'paso': paso.proceso.nombre})
+
+                                # Usar update_or_create para insertar o actualizar
+                                avance, created = AvanceProcesoElemento.objects.update_or_create(
+                                    elemento=elemento,
+                                    paso_proceso=paso,
+                                    defaults={'fecha_finalizacion': fecha_obj}
+                                )
+                            except ValueError:
+                                errores_guardado.append(("Formato de fecha inválido para '%(paso)s'. Use AAAA-MM-DD.") % {'paso': paso.proceso.nombre})
+                            except ValidationError as e:
+                                errores_guardado.append(e.message)
+
+                        else: # Si la fecha está vacía, borrar el registro si existe
+                            AvanceProcesoElemento.objects.filter(elemento=elemento, paso_proceso=paso).delete()
+
+                    except (ValueError, PasoProcesoTipoElemento.DoesNotExist):
+                        errores_guardado.append(("Paso de proceso inválido o incompatible encontrado (ID: %(id)s).") % {'id': paso_id_str})
+                    except Exception as e: # Captura general para otros posibles errores
+                        errores_guardado.append(f"Error inesperado al procesar paso {paso_id_str}: {e}")
+
+                if errores_guardado:
+                     raise ValidationError(errores_guardado) # Forzar rollback si hubo errores
+
+            messages.success(request, ("Avance para el elemento '%(elemento)s' guardado correctamente.") % {'elemento': elemento.identificador_unico})
+            # Redirigir a la misma página para poder seleccionar otro elemento
+            return redirect('registrar_avance_bim')
+
+        except ValidationError as e:
+            # Si hubo errores de validación (fechas futuras, formatos, etc.) o al borrar/guardar
+            for error_msg in e.messages:
+                 messages.error(request, error_msg)
+            # Volver a renderizar el formulario, pero necesitamos pasar el elemento seleccionado de nuevo
+            # para que el template pueda recargar los campos.
+            form = SeleccionarElementoForm(initial={'elemento': elemento})
+            # Idealmente, aquí también pasaríamos los datos POST erróneos para repoblar,
+            # pero dado que los campos son dinámicos, es más simple solo mostrar los errores.
+        except Exception as e: # Captura de errores inesperados durante la transacción
+            messages.error(request, f"Error al guardar los datos: {e}")
+            form = SeleccionarElementoForm() # Volver al estado inicial
+
+    else:
+        # --- Lógica para GET (Mostrar formulario vacío) ---
+        form = SeleccionarElementoForm()
+
+    context = {
+        'form': form,
+        # URLs para las llamadas AJAX desde JavaScript
+        'url_buscar_elementos': reverse('api_buscar_elementos'),
+        'url_obtener_pasos_base': reverse('api_obtener_pasos', args=['0']), # URL base con un ID temporal
+    }
+    # Usaremos una nueva plantilla para este formulario
+    return render(request, 'actividades/registrar_avance_bim.html', context)
