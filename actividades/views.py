@@ -4,7 +4,7 @@ from django.views.decorators.http import require_GET
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Prefetch
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy, reverse
 from datetime import date, timedelta
@@ -38,10 +38,16 @@ def historial_avance_view(request, proyecto_id):
     fecha_corte_total = date.today()
     total_programado_pv_acumulado = proyecto.get_valor_planeado_a_fecha(fecha_corte_total)
 
+    prefetch_zonas_anidadas = Prefetch(
+        'avances_por_zona',
+        queryset=AvancePorZona.objects.select_related('zona')
+    )
+
     avances_totales_acumulados = AvanceDiario.objects.filter(
         actividad__proyecto=proyecto,
         fecha_reporte__lte=fecha_corte_total
-    ).prefetch_related('avances_por_zona')
+    ).prefetch_related(prefetch_zonas_anidadas) 
+
 
     total_real_ev_acumulado = sum(avance.cantidad_total for avance in avances_totales_acumulados)
     spi_acumulado = (total_real_ev_acumulado / total_programado_pv_acumulado) if total_programado_pv_acumulado and total_programado_pv_acumulado > 0 else 0
@@ -49,7 +55,14 @@ def historial_avance_view(request, proyecto_id):
     semana_seleccionada_id = request.GET.get('semana_filtro')
     actividad_seleccionada_id = request.GET.get('actividad_filtro')
 
-    avances_para_tabla = AvanceDiario.objects.filter(actividad__proyecto=proyecto).select_related('actividad', 'empresa').prefetch_related('avances_por_zona')
+    # 3. Aplicamos el MISMO Prefetch a la consulta de la tabla
+    avances_para_tabla = AvanceDiario.objects.filter(
+        actividad__proyecto=proyecto
+    ).select_related(
+        'actividad', 'empresa'
+    ).prefetch_related(
+        prefetch_zonas_anidadas # <-- CORRECCIÓN APLICADA
+    )
 
     if actividad_seleccionada_id:
         avances_para_tabla = avances_para_tabla.filter(actividad_id=actividad_seleccionada_id)

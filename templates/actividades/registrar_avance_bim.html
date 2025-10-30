@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // URLs pasadas desde el contexto de la vista Django
     const searchUrl = '{{ url_buscar_elementos }}';
-    const pasosBaseUrl = '{{ url_obtener_pasos_base }}'.replace('/0/', '/'); // Quita el /0/ final
+    const urlTemplate = '{{ url_obtener_pasos_base }}';
 
     // --- Inicialización de TomSelect ---
     const tomSelect = new TomSelect(elementoSelectElement, {
@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
         dynamicFieldsTarget.innerHTML = ''; // Limpiar campos existentes
         pasosContainer.style.display = 'block'; // Mostrar contenedor
 
-        const url = `${pasosBaseUrl}${elementoId}/pasos/`;
+        const url = urlTemplate.replace('0', elementoId);
 
         fetch(url)
             .then(response => {
