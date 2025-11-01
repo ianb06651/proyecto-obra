@@ -6,6 +6,7 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ... (configuraciones existentes: SECRET_KEY, DEBUG, ALLOWED_HOSTS) ...
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-una-clave-local-cualquiera')
 
 IS_RENDER = os.environ.get('RENDER') == 'true'
@@ -20,6 +21,7 @@ RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
+
 INSTALLED_APPS = [
     'actividades',
     'django.contrib.admin',
@@ -28,8 +30,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    # --- AÑADIDO (Paso 6.2) ---
+    'rest_framework',
+    'rest_framework.authtoken',
+    # --- FIN AÑADIDO ---
 ]
 
+# ... (configuraciones existentes: MIDDLEWARE, ROOT_URLCONF, TEMPLATES, WSGI_APPLICATION, DATABASES, AUTH_PASSWORD_VALIDATORS) ...
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -60,8 +68,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'panel_de_control.wsgi.application'
-
-# ... (El resto de tu configuración de base de datos y demás sigue igual) ...
 
 if IS_RENDER:
     DATABASES = {
@@ -100,3 +106,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = '/admin/login/'
 
 WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY')
+
+# --- AÑADIDO (Paso 6.2) ---
+# Configuración de Django REST Framework para usar autenticación por Token
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        # Se prioriza TokenAuthentication para las APIs
+        'rest_framework.authentication.TokenAuthentication',
+        # SessionAuthentication se mantiene para la API navegable (opcional)
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        # Política global: solo usuarios autenticados pueden acceder a las APIs
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
+# --- FIN AÑADIDO ---

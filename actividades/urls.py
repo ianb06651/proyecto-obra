@@ -8,10 +8,7 @@ urlpatterns = [
     path('', views.pagina_principal, name='pagina_principal'),
 
     # --- URLS PARA AVANCES, REPORTES, ETC. ---
-    
-    # URL Simplificada: Ya no necesita el ID del proyecto
     path('avance/registrar/', views.registrar_avance, name='registrar_avance'),
-    
     path('avance/editar/<int:pk>/', views.editar_avance, name='editar_avance'),
     path('avance/borrar/<int:pk>/', views.borrar_avance, name='borrar_avance'),
     path('maquinaria/reporte/nuevo/', views.registrar_reporte_maquinaria, name='registrar_reporte_maquinaria'),
@@ -25,13 +22,19 @@ urlpatterns = [
     path('wbs/<int:pk>/editar/', views.ActividadUpdateView.as_view(), name='actividad_update'),
 
     # --- URL PARA EL HISTORIAL UNIFICADO ---
-    # Esta URL sí necesita el ID para saber qué historial mostrar
     path('proyecto/<int:proyecto_id>/historial/', views.historial_avance_view, name='historial_avance'),
     
     # --- URLs PARA REGISTRO DE AVANCE BIM ---
     path('bim/registrar/', views.registrar_avance_bim, name='registrar_avance_bim'),
 
-    # --- URLs DE API PARA FORMULARIO DINÁMICO ---
+    # --- URLs DE API ---
+    
+    # --- NUEVA URL DE API (Paso 6.5) ---
+    path('api/bim/status-general/', 
+         views.ElementoStatusAPIView.as_view(), 
+         name='api_bim_status_general'),
+    # --- FIN NUEVA URL ---
+
     path('api/buscar-elementos/',
          views.buscar_elementos_constructivos,
          name='api_buscar_elementos'),

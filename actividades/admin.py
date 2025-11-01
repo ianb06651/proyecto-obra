@@ -1,4 +1,5 @@
-# src/actividades/admin.py
+# actividades/admin.py
+
 from django.contrib import admin
 from .models import (
     Empresa, Cargo, AreaDeTrabajo, Semana,
@@ -10,9 +11,9 @@ from .models import (
 )
 
 # --- Registros de Catálogos ---
+# ... (El resto de tus registros: Empresa, Cargo, Semana, etc. no cambian) ...
 admin.site.register(Empresa)
 admin.site.register(Cargo)
-# admin.site.register(AreaDeTrabajo) # Se comenta o elimina el registro simple
 admin.site.register(Semana)
 admin.site.register(PartidaActividad)
 admin.site.register(PartidaPersonal)
@@ -20,15 +21,10 @@ admin.site.register(TipoMaquinaria)
 admin.site.register(ReporteClima)
 
 
-# --- NUEVO: ModelAdmin para AreaDeTrabajo ---
 @admin.register(AreaDeTrabajo)
 class AreaDeTrabajoAdmin(admin.ModelAdmin):
-    """
-    Configuración necesaria para habilitar la búsqueda
-    en los campos de autocompletado.
-    """
     list_display = ('nombre',)
-    search_fields = ('nombre',) # <-- ESTA LÍNEA RESUELVE EL ERROR
+    search_fields = ('nombre',)
 
 
 # --- Inlines para gestionar los desgloses ---
@@ -36,7 +32,6 @@ class MetaPorZonaInline(admin.TabularInline):
     model = MetaPorZona
     extra = 1
     autocomplete_fields = ['zona']
-    # Añadimos los campos al inline para que se puedan editar
     fields = ('zona', 'meta', 'fecha_inicio_programada', 'fecha_fin_programada')
 
 class AvancePorZonaInline(admin.TabularInline):
@@ -44,7 +39,7 @@ class AvancePorZonaInline(admin.TabularInline):
     extra = 1
     autocomplete_fields = ['zona']
 
-# --- Configuraciones Avanzadas (Modificadas) ---
+# --- Configuraciones Avanzadas (WBS y Avances) ---
 
 @admin.register(Proyecto)
 class ProyectoAdmin(admin.ModelAdmin):
@@ -53,24 +48,22 @@ class ProyectoAdmin(admin.ModelAdmin):
 
 @admin.register(Actividad)
 class ActividadAdmin(admin.ModelAdmin):
-    # MODIFICADO: Se elimina 'meta_general' de fields.
     fields = (
         'proyecto',
         'partida',
         'padre',
         'nombre',
-        'unidad_medida', # 'meta_general' fue quitado de esta tupla
+        'unidad_medida',
         ('fecha_inicio_programada', 'fecha_fin_programada')
     )
-    # Se mantiene 'meta_total' (propiedad calculada) en list_display
     list_display = ('__str__', 'proyecto', 'partida', 'meta_total')
     list_select_related = ('padre', 'proyecto', 'partida')
     list_filter = ('proyecto', 'partida')
     search_fields = ('nombre', 'padre__nombre')
     autocomplete_fields = ['padre']
     list_per_page = 25
-    inlines = [MetaPorZonaInline] # El inline para metas por zona es ahora la única forma de ver/editar metas
-    readonly_fields = ('meta_total',) # 'meta_total' sigue siendo readonly
+    inlines = [MetaPorZonaInline]
+    readonly_fields = ('meta_total',)
 
 @admin.register(ReportePersonal)
 class ReportePersonalAdmin(admin.ModelAdmin):
@@ -79,17 +72,18 @@ class ReportePersonalAdmin(admin.ModelAdmin):
 
 @admin.register(AvanceDiario)
 class AvanceDiarioAdmin(admin.ModelAdmin):
-    # MODIFICADO: Se elimina 'cantidad_general' de list_display. Se mantiene 'cantidad_total'.
-    list_display = ('fecha_reporte', 'actividad', 'cantidad_total') # 'cantidad_general' eliminado
+    list_display = ('fecha_reporte', 'actividad', 'cantidad_total')
     list_filter = ('fecha_reporte', 'empresa')
     autocomplete_fields = ['actividad']
-    inlines = [AvancePorZonaInline] # El inline es ahora la única forma de ver/editar avances
-    readonly_fields = ('cantidad_total',) # 'cantidad_total' sigue siendo readonly
+    inlines = [AvancePorZonaInline]
+    readonly_fields = ('cantidad_total',)
 
 @admin.register(ReporteDiarioMaquinaria)
 class ReporteDiarioMaquinariaAdmin(admin.ModelAdmin):
     list_display = ('fecha', 'tipo_maquinaria', 'partida', 'empresa', 'cantidad_total', 'cantidad_activa')
     list_filter = ('fecha', 'empresa', 'partida', 'tipo_maquinaria')
+
+# --- CONFIGURACIÓN ADMIN PARA MODELOS BIM ---
 
 @admin.register(ProcesoConstructivo)
 class ProcesoConstructivoAdmin(admin.ModelAdmin):
@@ -97,13 +91,12 @@ class ProcesoConstructivoAdmin(admin.ModelAdmin):
     search_fields = ('nombre',)
 
 class PasoProcesoTipoElementoInline(admin.TabularInline):
-    """ Permite definir los pasos directamente al crear/editar un TipoElemento """
     model = PasoProcesoTipoElemento
     extra = 1
     ordering = ('orden',)
-    autocomplete_fields = ['proceso'] # Asume que ProcesoConstructivoAdmin tiene search_fields
+    autocomplete_fields = ['proceso'] 
 
-@admin.register(TipoElemento) # Re-registrar TipoElemento para añadir el inline
+@admin.register(TipoElemento)
 class TipoElementoConPasosAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'descripcion')
     search_fields = ('nombre',)
@@ -117,17 +110,24 @@ class PasoProcesoTipoElementoAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tipo_elemento', 'proceso']
     list_editable = ('orden',)
 
+# --- MODIFICACIÓN (Paso 3) ---
 @admin.register(ElementoConstructivo)
 class ElementoConstructivoAdmin(admin.ModelAdmin):
-    list_display = ('identificador_unico', 'tipo_elemento', 'descripcion')
+    # 1. Añadido 'identificador_bim' a list_display para ver ambos IDs
+    list_display = ('identificador_unico', 'identificador_bim', 'tipo_elemento', 'descripcion')
     list_filter = ('tipo_elemento',)
-    search_fields = ('identificador_unico', 'descripcion') # ¡Importante para la búsqueda!
+    # 2. Añadido 'identificador_bim' a search_fields para buscar por CUALQUIER ID
+    search_fields = ('identificador_unico', 'identificador_bim', 'descripcion') 
     autocomplete_fields = ['tipo_elemento']
+# --- FIN MODIFICACIÓN ---
 
 @admin.register(AvanceProcesoElemento)
 class AvanceProcesoElementoAdmin(admin.ModelAdmin):
     list_display = ('elemento', 'paso_proceso', 'fecha_finalizacion')
     list_filter = ('paso_proceso__tipo_elemento', 'fecha_finalizacion')
-    search_fields = ('elemento__identificador_unico', 'paso_proceso__proceso__nombre')
+    # --- MODIFICACIÓN (Mejora) ---
+    # 3. Permitir buscar avances por cualquiera de los IDs del elemento
+    search_fields = ('elemento__identificador_unico', 'elemento__identificador_bim', 'paso_proceso__proceso__nombre') 
+    # --- FIN MODIFICACIÓN ---
     autocomplete_fields = ['elemento', 'paso_proceso']
-    date_hierarchy = 'fecha_finalizacion' # Facilita la navegación por fechas
+    date_hierarchy = 'fecha_finalizacion'

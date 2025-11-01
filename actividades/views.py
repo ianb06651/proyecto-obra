@@ -4,12 +4,20 @@ from django.views.decorators.http import require_GET
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db.models import Sum, Q, Prefetch
+from django.db.models import Sum, Q, Prefetch, Count # <--- Q y Count están aquí
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy, reverse
 from datetime import date, timedelta
 from django.db import IntegrityError, transaction
-from django.core.exceptions import ValidationError # Importar ValidationError
+from django.core.exceptions import ValidationError 
+
+# --- Importaciones para la NUEVA API (Paso 6) ---
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication
+from .serializers import ElementoStatusSerializer
+# --- Fin importaciones API ---
+
 
 from .forms import (
     ReporteMaquinariaForm, ReportePersonalForm, ActividadForm,
@@ -28,8 +36,7 @@ from .models import (
 def es_staff(user):
     return user.is_staff
 
-# --- Vistas Modificadas para el nuevo modelo de datos ---
-
+# ... (El resto de tus vistas: historial_avance_view, ActividadListView, etc. no cambian) ...
 def historial_avance_view(request, proyecto_id):
     proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
     semanas = Semana.objects.all()
@@ -55,13 +62,12 @@ def historial_avance_view(request, proyecto_id):
     semana_seleccionada_id = request.GET.get('semana_filtro')
     actividad_seleccionada_id = request.GET.get('actividad_filtro')
 
-    # 3. Aplicamos el MISMO Prefetch a la consulta de la tabla
     avances_para_tabla = AvanceDiario.objects.filter(
         actividad__proyecto=proyecto
     ).select_related(
         'actividad', 'empresa'
     ).prefetch_related(
-        prefetch_zonas_anidadas # <-- CORRECCIÓN APLICADA
+        prefetch_zonas_anidadas
     )
 
     if actividad_seleccionada_id:
@@ -199,8 +205,6 @@ class ActividadUpdateView(UpdateView):
             
         return super().form_valid(form)
 
-
-# --- VISTA DE REGISTRO DE AVANCE (LÓGICA ADITIVA CORREGIDA) ---
 def registrar_avance(request):
     proyecto = Proyecto.objects.first()
     if not proyecto:
@@ -217,13 +221,9 @@ def registrar_avance(request):
     formset = None 
 
     if request.method == 'POST':
-        # *** CORRECCIÓN CLAVE ***
-        # Instanciamos el form principal, pasándole el flag para que NO valide unicidad
         form = AvanceDiarioForm(request.POST, actividad_queryset=actividad_queryset, validate_uniqueness=False)
 
         if form.is_valid():
-            # Si el form es válido (comprueba que los campos existan),
-            # procedemos a NUESTRA lógica de 'get_or_create'
             actividad = form.cleaned_data['actividad']
             fecha = form.cleaned_data['fecha_reporte']
             empresa = form.cleaned_data['empresa']
@@ -236,8 +236,6 @@ def registrar_avance(request):
                         empresa=empresa,
                         defaults={}
                     )
-
-                    # Instanciamos el formset CON la instancia padre
                     formset = AvancePorZonaFormSet(request.POST, instance=avance_diario_obj)
 
                     if formset.is_valid():
@@ -252,7 +250,6 @@ def registrar_avance(request):
                             form.add_error(None, "Debes registrar el avance para al menos una zona.")
                             raise ValidationError("Sin zonas válidas")
 
-                        # Mensajes condicionales
                         if creado and zonas_validas > 0:
                             messages.success(request, "¡Avance registrado con éxito!")
                         elif not creado:
@@ -271,15 +268,10 @@ def registrar_avance(request):
                 messages.error(request, f"Ocurrió un error inesperado: {e}")
         
         else:
-            # El form principal (AvanceDiarioForm) NO FUE VÁLIDO
-            # (Esto es lo que te estaba pasando)
             messages.error(request, 'Por favor, corrige los errores en los campos principales.')
             formset = AvancePorZonaFormSet(request.POST) 
     
     else:
-        # Petición GET
-        # *** CORRECCIÓN CLAVE ***
-        # Pasamos el flag aquí también para la instancia GET del formulario
         form = AvanceDiarioForm(actividad_queryset=actividad_queryset, validate_uniqueness=False)
         formset = AvancePorZonaFormSet() 
 
@@ -296,18 +288,14 @@ def registrar_avance(request):
     }
     return render(request, 'actividades/registrar_avance.html', contexto)
 
-
-# --- VISTA DE EDICIÓN DE AVANCE (SIN CAMBIOS, YA ERA CORRECTA) ---
 @login_required
 @user_passes_test(es_staff)
 def editar_avance(request, pk):
     avance = get_object_or_404(AvanceDiario, pk=pk)
+    form = AvanceDiarioForm(request.POST or None, instance=avance)
+    formset = AvancePorZonaFormSet(request.POST or None, instance=avance)
 
     if request.method == 'POST':
-        # Usa el 'validate_uniqueness=True' por defecto, lo cual es correcto aquí
-        form = AvanceDiarioForm(request.POST, instance=avance)
-        formset = AvancePorZonaFormSet(request.POST, instance=avance)
-
         try:
             with transaction.atomic():
                 if not form.is_valid() or not formset.is_valid():
@@ -334,11 +322,6 @@ def editar_avance(request, pk):
         except Exception as e:
             messages.error(request, f'Ocurrió un error inesperado: {e}')
             
-    else:
-        # Petición GET
-        form = AvanceDiarioForm(instance=avance) # Usa 'validate_uniqueness=True' por defecto
-        formset = AvancePorZonaFormSet(instance=avance)
-
     contexto = {
         'form': form,
         'formset': formset,
@@ -346,8 +329,6 @@ def editar_avance(request, pk):
     }
     return render(request, 'actividades/editar_avance.html', contexto)
 
-
-# --- Vistas restantes (sin cambios) ---
 
 def pagina_principal(request):
     proyectos = Proyecto.objects.all()
@@ -445,19 +426,31 @@ def vista_clima(request):
 
 # --- VISTAS DE API PARA FORMULARIO BIM DINÁMICO ---
 
+# --- MODIFICACIÓN (Paso 5) ---
 @require_GET
 def buscar_elementos_constructivos(request):
     query = request.GET.get('term', '')
     if len(query) < 2:
         return JsonResponse([], safe=False)
+    
+    # Lógica de búsqueda OR con Q
+    # Busca en el ID legible (identificador_unico) O en el ID de BIM (identificador_bim)
     elementos = ElementoConstructivo.objects.filter(
-        identificador_unico__icontains=query
-    )[:10] 
+        Q(identificador_unico__icontains=query) |
+        Q(identificador_bim__icontains=query)
+    ).select_related('tipo_elemento')[:10] # Limitar resultados
+    
+    # Formato de texto actualizado para mostrar ambos IDs
     resultados = [
-        {'id': el.id, 'text': el.identificador_unico}
+        {
+            'id': el.id, 
+            # Muestra el ID legible y, si existe, el ID de BIM
+            'text': f"{el.identificador_unico} (BIM ID: {el.identificador_bim or 'N/A'}) - {el.tipo_elemento.nombre}"
+        }
         for el in elementos
     ]
     return JsonResponse(resultados, safe=False)
+# --- FIN MODIFICACIÓN (Paso 5) ---
 
 @require_GET
 def obtener_pasos_y_avance_elemento(request, elemento_id):
@@ -487,8 +480,6 @@ def obtener_pasos_y_avance_elemento(request, elemento_id):
         })
 
     return JsonResponse({'pasos': pasos_data})
-
-# --- VISTA PRINCIPAL PARA REGISTRO DE AVANCE BIM ---
 
 def registrar_avance_bim(request):
     if request.method == 'POST':
@@ -545,7 +536,7 @@ def registrar_avance_bim(request):
                 if errores_guardado:
                      raise ValidationError(errores_guardado) 
 
-            messages.success(request, ("Avance para el elemento '%(elemento)s' guardado correctamente.") % {'elemento': elemento.identificador_unico})
+            messages.success(request, ("Avance para el elemento '%(elemento)s' guardado correctamente.") % {'elemento': elemento})
             return redirect('registrar_avance_bim')
 
         except ValidationError as e:
@@ -565,3 +556,29 @@ def registrar_avance_bim(request):
         'url_obtener_pasos_base': reverse('api_obtener_pasos', args=['0']), 
     }
     return render(request, 'actividades/registrar_avance_bim.html', context)
+
+
+# --- NUEVA VISTA DE API (Paso 6) ---
+class ElementoStatusAPIView(ListAPIView):
+    """
+    API de solo lectura para exponer el estado de los elementos constructivos.
+    Requiere autenticación por Token.
+    """
+    serializer_class = ElementoStatusSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Optimiza la consulta anotando los conteos de pasos
+        directamente desde la base de datos para evitar problemas N+1.
+        """
+        return ElementoConstructivo.objects.annotate(
+            # Usa 'total_pasos' y 'pasos_completados' para que coincidan
+            # con las propiedades del modelo, así el serializer puede usarlas.
+            total_pasos=Count('tipo_elemento__pasos_proceso', distinct=True),
+            pasos_completados=Count('avances_proceso', distinct=True)
+        ).select_related('tipo_elemento').filter(identificador_bim__isnull=False)
+        # Filtramos para devolver solo elementos que TENGAN un ID de BIM,
+        # ya que Navisworks no podrá vincular los que son nulos.
+# --- FIN NUEVA VISTA ---
