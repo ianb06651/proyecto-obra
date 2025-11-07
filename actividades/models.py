@@ -338,28 +338,22 @@ class PasoProcesoTipoElemento(models.Model):
         return f"{self.tipo_elemento.nombre} - Paso {self.orden}: {self.proceso.nombre}"
 
 class ElementoConstructivo(models.Model):
-    """ Representa cada objeto físico individual en la obra. Ej: Zapata Z-10."""
+    """ 
+    Representa cada objeto físico conceptual en la obra (el "código de ejes"). 
+    Ej: Zapata Z-10. Este elemento puede tener MÚLTIPLES GUIDs asociados.
+    """
     
-    # --- CAMPO EXISTENTE (Ahora para el ID legible) ---
     identificador_unico = models.CharField(
-        _("Código de Ejes / ID Humano"), # <--- verbose_name CAMBIADO
+        _("Código de Ejes / ID Humano"), 
         max_length=255,
         unique=True,
         db_index=True,
-        help_text=_("El identificador legible por humanos (ej. ZA-B5) que se usará para buscar.") # <--- help_text CAMBIADO
+        help_text=_("El identificador legible por humanos (ej. ZA-B5) que se usará para buscar.")
     )
     
-    # --- CAMPO NUEVO (Para el ID de la máquina) ---
-    identificador_bim = models.CharField(
-        _("Identificador BIM (Revit/Navis)"),
-        max_length=255,
-        unique=True,
-        db_index=True,
-        blank=True,  # <--- PERMITIR VACÍO
-        null=True,   # <--- PERMITIR NULO
-        help_text=_("El ID único inmutable del modelo BIM (ej. 1234567).")
-    )
-    # --- FIN CAMPO NUEVO ---
+    # --- CAMPO ELIMINADO ---
+    # El campo 'identificador_bim' que estaba aquí ha sido removido.
+    # --- FIN CAMPO ELIMINADO ---
 
     tipo_elemento = models.ForeignKey(TipoElemento, on_delete=models.PROTECT, related_name='elementos')
     descripcion = models.CharField(_("Descripción Adicional"), max_length=255, blank=True, null=True)
@@ -367,14 +361,11 @@ class ElementoConstructivo(models.Model):
     class Meta:
         verbose_name = _("Elemento Constructivo")
         verbose_name_plural = _("Elementos Constructivos")
-        ordering = ['identificador_unico'] # Ordenar por el código legible
+        ordering = ['identificador_unico'] 
 
-    # --- __str__ ACTUALIZADO (Usa el ID legible) ---
     def __str__(self):
-        # Muestra el código legible (que ahora es identificador_unico)
         return self.identificador_unico
     
-    # --- PROPIEDADES (Sin cambios, listas para el Paso 6) ---
     @property
     def total_pasos(self):
         if not hasattr(self, '_total_pasos'):
@@ -389,14 +380,48 @@ class ElementoConstructivo(models.Model):
 
     @property
     def status(self):
-        completados = self.pasos_completados
-        totales = self.total_pasos
+        # Usamos getattr para poder aprovechar los valores 'anotados' por el
+        # queryset de la API, y si no existen, los calculamos.
+        completados = getattr(self, 'pasos_completados', self.avances_proceso.count())
+        totales = getattr(self, 'total_pasos', self.tipo_elemento.pasos_proceso.count())
 
         if completados == 0:
             return "Pendiente"
         if totales > 0 and completados >= totales:
             return "Completado"
         return "En Proceso"
+
+
+# --- NUEVO MODELO ---
+class ElementoBIM_GUID(models.Model):
+    """
+    Almacena los GUIDs individuales del modelo BIM (Revit/Navisworks)
+    y los vincula a un único ElementoConstructivo (código de ejes).
+    """
+    elemento_constructivo = models.ForeignKey(
+        ElementoConstructivo, 
+        on_delete=models.CASCADE, 
+        # related_name nos permite hacer: mi_elemento_constructivo.guids_bim.all()
+        related_name='guids_bim', 
+        verbose_name=_("Elemento Constructivo (Ejes)")
+    )
+    identificador_bim = models.CharField(
+        _("Identificador BIM (GUID)"),
+        max_length=255,
+        unique=True,  # Un GUID debe ser único en todo el proyecto
+        db_index=True,
+        help_text=_("El GUID único inmutable del modelo BIM (ej. 1a2b3c4d-...).")
+    )
+    
+    class Meta:
+        verbose_name = _("GUID de Elemento BIM")
+        verbose_name_plural = _("GUIDs de Elementos BIM")
+        ordering = ['elemento_constructivo', 'identificador_bim']
+
+    def __str__(self):
+        # Texto de ayuda para el admin
+        return f"{self.identificador_bim} -> {self.elemento_constructivo.identificador_unico}"
+# --- FIN NUEVO MODELO ---
 
 
 class AvanceProcesoElemento(models.Model):
@@ -412,7 +437,6 @@ class AvanceProcesoElemento(models.Model):
         ordering = ['elemento', 'paso_proceso__orden']
 
     def __str__(self):
-        # Actualizado para usar el __str__ del elemento (que ahora es el código legible)
         return f"{self.elemento} - {self.paso_proceso.proceso.nombre}: {self.fecha_finalizacion}"
 
     def clean(self):

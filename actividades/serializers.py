@@ -1,36 +1,44 @@
 # actividades/serializers.py
 
 from rest_framework import serializers
-from .models import ElementoConstructivo
+# --- 1. MODIFICADO: Importar los dos modelos ---
+from .models import ElementoConstructivo, ElementoBIM_GUID
 
-class ElementoStatusSerializer(serializers.ModelSerializer):
+# --- 2. NUEVO SERIALIZADOR ---
+class ElementoBIM_GUID_Serializer(serializers.ModelSerializer):
     """
-    Serializador para exponer el estado de un Elemento Constructivo a Navisworks.
-    """
-    # SerializerMethodField nos da control total sobre el valor de salida.
-    status = serializers.SerializerMethodField()
+    Serializador para exponer el estado de un Elemento Constructivo
+    a través de su GUID de BIM.
     
-    # Exponemos 'identificador_bim' como el campo clave para la vinculación.
-    # Usamos 'source' para leer del campo del modelo.
+    Cada GUID en la BD generará un objeto JSON en la API,
+    pero el 'status' y 'identificador_unico' se tomarán del
+    ElementoConstructivo padre al que está vinculado.
+    """
+    
+    # "id_navisworks" será el campo 'identificador_bim' de este modelo
     id_navisworks = serializers.CharField(source='identificador_bim')
+    
+    # "identificador_unico" se obtiene siguiendo la ForeignKey
+    # al 'elemento_constructivo' padre y leyendo su campo 'identificador_unico'
+    identificador_unico = serializers.CharField(source='elemento_constructivo.identificador_unico')
+    
+    # "status" también se obtiene del 'elemento_constructivo' padre,
+    # usando su propiedad @property 'status'
+    status = serializers.CharField(source='elemento_constructivo.status')
 
     class Meta:
-        model = ElementoConstructivo
-        # Campos que se expondrán en la API
+        model = ElementoBIM_GUID # <--- El modelo base es el GUID
         fields = [
-            'id_navisworks', # El ID de máquina para Navisworks
+            'id_navisworks',       # El ID de máquina (GUID) para Navisworks
             'identificador_unico', # El ID legible (ej. ZA-B5) como dato extra
-            'status' # El estado calculado
+            'status'               # El estado calculado (Pendiente, En Proceso, Completado)
         ]
+# --- FIN NUEVO SERIALIZADOR ---
 
-    def get_status(self, obj):
-        """
-        Calcula el estado basado en los campos anotados por el queryset de la vista.
-        
-        'obj' es la instancia de ElementoConstructivo.
-        Esperamos que la vista (get_queryset) ya haya anotado
-        'total_pasos' y 'pasos_completados' en el objeto.
-        """
-        # Accedemos a las propiedades que ya definimos en models.py
-        # La vista se habrá encargado de optimizar esto con 'annotate'.
-        return obj.status
+
+# --- 3. ELIMINADO/OBSOLETO ---
+# El Serializer 'ElementoStatusSerializer' anterior ya no es necesario
+# ya que 'ElementoStatusAPIView' ahora usará 'ElementoBIM_GUID_Serializer'.
+
+# class ElementoStatusSerializer(serializers.ModelSerializer):
+#    ... (este bloque de código se elimina) ...

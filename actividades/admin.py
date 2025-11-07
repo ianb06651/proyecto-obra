@@ -7,7 +7,8 @@ from .models import (
     Actividad, ReportePersonal, AvanceDiario, TipoMaquinaria,
     ReporteDiarioMaquinaria, ReporteClima, Proyecto,
     MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
-    ElementoConstructivo, AvanceProcesoElemento
+    ElementoConstructivo, AvanceProcesoElemento,
+    ElementoBIM_GUID # <--- 1. IMPORTAR EL NUEVO MODELO
 )
 
 # --- Registros de Catálogos ---
@@ -110,24 +111,43 @@ class PasoProcesoTipoElementoAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tipo_elemento', 'proceso']
     list_editable = ('orden',)
 
-# --- MODIFICACIÓN (Paso 3) ---
+# --- 2. NUEVO INLINE ---
+class ElementoBIM_GUID_Inline(admin.TabularInline):
+    """Permite añadir/editar GUIDs directamente desde la vista de ElementoConstructivo."""
+    model = ElementoBIM_GUID
+    extra = 1 # Empieza con un campo vacío para añadir un nuevo GUID
+    fields = ('identificador_bim',)
+    # Opcional: añade búsqueda si la lista de GUIDs se vuelve muy larga
+    # search_fields = ('identificador_bim',) 
+    verbose_name = "GUID de BIM"
+    verbose_name_plural = "GUIDs de BIM (Navisworks/Revit)"
+
+# --- 3. MODIFICAR ElementoConstructivoAdmin ---
 @admin.register(ElementoConstructivo)
 class ElementoConstructivoAdmin(admin.ModelAdmin):
-    # 1. Añadido 'identificador_bim' a list_display para ver ambos IDs
-    list_display = ('identificador_unico', 'identificador_bim', 'tipo_elemento', 'descripcion')
+    # Quitado 'identificador_bim' de list_display
+    list_display = ('identificador_unico', 'tipo_elemento', 'descripcion')
     list_filter = ('tipo_elemento',)
-    # 2. Añadido 'identificador_bim' a search_fields para buscar por CUALQUIER ID
-    search_fields = ('identificador_unico', 'identificador_bim', 'descripcion') 
+    # Quitado 'identificador_bim' de search_fields
+    search_fields = ('identificador_unico', 'descripcion') 
     autocomplete_fields = ['tipo_elemento']
-# --- FIN MODIFICACIÓN ---
+    # Añadido el nuevo inline
+    inlines = [ElementoBIM_GUID_Inline]
+
 
 @admin.register(AvanceProcesoElemento)
 class AvanceProcesoElementoAdmin(admin.ModelAdmin):
     list_display = ('elemento', 'paso_proceso', 'fecha_finalizacion')
     list_filter = ('paso_proceso__tipo_elemento', 'fecha_finalizacion')
-    # --- MODIFICACIÓN (Mejora) ---
-    # 3. Permitir buscar avances por cualquiera de los IDs del elemento
-    search_fields = ('elemento__identificador_unico', 'elemento__identificador_bim', 'paso_proceso__proceso__nombre') 
-    # --- FIN MODIFICACIÓN ---
+    # --- 4. MODIFICAR search_fields ---
+    # Actualizado para buscar a través de la nueva relación 'guids_bim'
+    search_fields = ('elemento__identificador_unico', 'elemento__guids_bim__identificador_bim', 'paso_proceso__proceso__nombre') 
     autocomplete_fields = ['elemento', 'paso_proceso']
     date_hierarchy = 'fecha_finalizacion'
+
+# --- 5. Opcional: Registrar el modelo GUID por sí mismo ---
+@admin.register(ElementoBIM_GUID)
+class ElementoBIM_GUID_Admin(admin.ModelAdmin):
+    list_display = ('identificador_bim', 'elemento_constructivo')
+    search_fields = ('identificador_bim', 'elemento_constructivo__identificador_unico')
+    autocomplete_fields = ['elemento_constructivo']

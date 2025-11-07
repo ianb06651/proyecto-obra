@@ -4,7 +4,7 @@ from django.views.decorators.http import require_GET
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db.models import Sum, Q, Prefetch, Count # <--- Q y Count están aquí
+from django.db.models import Sum, Q, Prefetch, Count 
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy, reverse
 from datetime import date, timedelta
@@ -15,7 +15,8 @@ from django.core.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
-from .serializers import ElementoStatusSerializer
+# --- 1. MODIFICADO: Importar el nuevo Serializer ---
+from .serializers import ElementoBIM_GUID_Serializer
 # --- Fin importaciones API ---
 
 
@@ -29,11 +30,16 @@ from .models import (
     Actividad, AvanceDiario, Semana, PartidaActividad, ReportePersonal,
     Empresa, Cargo, AreaDeTrabajo, ReporteDiarioMaquinaria, Proyecto,
     AvancePorZona, MetaPorZona, ElementoConstructivo, 
-    PasoProcesoTipoElemento, AvanceProcesoElemento, TipoElemento
+    PasoProcesoTipoElemento, AvanceProcesoElemento, TipoElemento,
+    ElementoBIM_GUID # <--- IMPORTAR EL NUEVO MODELO
 )
 
 # --- Vistas sin cambios funcionales directos ---
 def es_staff(user):
+    """
+    Función de prueba para el decorador user_passes_test.
+    Debe estar definida antes de ser usada.
+    """
     return user.is_staff
 
 # ... (El resto de tus vistas: historial_avance_view, ActividadListView, etc. no cambian) ...
@@ -288,8 +294,9 @@ def registrar_avance(request):
     }
     return render(request, 'actividades/registrar_avance.html', contexto)
 
+
 @login_required
-@user_passes_test(es_staff)
+@user_passes_test(es_staff) # Esta es la línea 318
 def editar_avance(request, pk):
     avance = get_object_or_404(AvanceDiario, pk=pk)
     form = AvanceDiarioForm(request.POST or None, instance=avance)
@@ -426,31 +433,30 @@ def vista_clima(request):
 
 # --- VISTAS DE API PARA FORMULARIO BIM DINÁMICO ---
 
-# --- MODIFICACIÓN (Paso 5) ---
+# --- 2. MODIFICAR buscar_elementos_constructivos ---
 @require_GET
 def buscar_elementos_constructivos(request):
     query = request.GET.get('term', '')
     if len(query) < 2:
         return JsonResponse([], safe=False)
     
-    # Lógica de búsqueda OR con Q
-    # Busca en el ID legible (identificador_unico) O en el ID de BIM (identificador_bim)
+    # Lógica de búsqueda OR actualizada
+    # Busca en 'identificador_unico' O en la relación 'guids_bim__identificador_bim'
     elementos = ElementoConstructivo.objects.filter(
         Q(identificador_unico__icontains=query) |
-        Q(identificador_bim__icontains=query)
-    ).select_related('tipo_elemento')[:10] # Limitar resultados
+        Q(guids_bim__identificador_bim__icontains=query)
+    ).select_related('tipo_elemento').distinct()[:10] # .distinct() es clave
     
-    # Formato de texto actualizado para mostrar ambos IDs
+    # El texto de resultado ahora solo muestra el ID legible (código de ejes)
     resultados = [
         {
             'id': el.id, 
-            # Muestra el ID legible y, si existe, el ID de BIM
-            'text': f"{el.identificador_unico} (BIM ID: {el.identificador_bim or 'N/A'}) - {el.tipo_elemento.nombre}"
+            'text': f"{el.identificador_unico} - {el.tipo_elemento.nombre}"
         }
         for el in elementos
     ]
     return JsonResponse(resultados, safe=False)
-# --- FIN MODIFICACIÓN (Paso 5) ---
+# --- FIN MODIFICACIÓN ---
 
 @require_GET
 def obtener_pasos_y_avance_elemento(request, elemento_id):
@@ -558,27 +564,43 @@ def registrar_avance_bim(request):
     return render(request, 'actividades/registrar_avance_bim.html', context)
 
 
-# --- NUEVA VISTA DE API (Paso 6) ---
+# --- 3. MODIFICAR VISTA DE API (ElementoStatusAPIView) ---
 class ElementoStatusAPIView(ListAPIView):
     """
     API de solo lectura para exponer el estado de los elementos constructivos.
-    Requiere autenticación por Token.
+    Ahora expone un objeto por CADA GUID, permitiendo que múltiples GUIDs
+    se vinculen al mismo estado de un ElementoConstructivo.
     """
-    serializer_class = ElementoStatusSerializer
+    # Cambiar al nuevo serializador
+    serializer_class = ElementoBIM_GUID_Serializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """
-        Optimiza la consulta anotando los conteos de pasos
-        directamente desde la base de datos para evitar problemas N+1.
+        Optimiza la consulta:
+        1. Obtiene todos los GUIDs (ElementoBIM_GUID).
+        2. Se trae la información de su 'elemento_constructivo' padre (select_related).
+        3. Se trae la información del 'tipo_elemento' del padre (select_related).
+        4. Anota los conteos de pasos en el 'elemento_constructivo' padre
+           para que el serializador pueda acceder a 'status'.
         """
-        return ElementoConstructivo.objects.annotate(
-            # Usa 'total_pasos' y 'pasos_completados' para que coincidan
-            # con las propiedades del modelo, así el serializer puede usarlas.
-            total_pasos=Count('tipo_elemento__pasos_proceso', distinct=True),
-            pasos_completados=Count('avances_proceso', distinct=True)
-        ).select_related('tipo_elemento').filter(identificador_bim__isnull=False)
-        # Filtramos para devolver solo elementos que TENGAN un ID de BIM,
-        # ya que Navisworks no podrá vincular los que son nulos.
-# --- FIN NUEVA VISTA ---
+        # La consulta base ahora es sobre ElementoBIM_GUID
+        return ElementoBIM_GUID.objects.select_related(
+            'elemento_constructivo', # Trae el ElementoConstructivo (padre)
+            'elemento_constructivo__tipo_elemento' # Trae el TipoElemento (abuelo)
+        ).annotate(
+            # Anotamos los valores en el objeto.
+            # OJO: Los nombres 'total_pasos' y 'pasos_completados' deben coincidir
+            # con los nombres de @property en el modelo ElementoConstructivo
+            # para que el serializador los use correctamente.
+            total_pasos=Count(
+                'elemento_constructivo__tipo_elemento__pasos_proceso', 
+                distinct=True
+            ),
+            pasos_completados=Count(
+                'elemento_constructivo__avances_proceso', 
+                distinct=True
+            )
+        )
+# --- FIN MODIFICACIÓN ---
