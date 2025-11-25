@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 
 # --- Importaciones para la NUEVA API (Paso 6) ---
 from rest_framework.generics import ListAPIView
+from django.db.models import Count, Max
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 # --- 1. MODIFICADO: Importar el nuevo Serializer ---
@@ -42,7 +43,7 @@ def es_staff(user):
     """
     return user.is_staff
 
-# ... (El resto de tus vistas: historial_avance_view, ActividadListView, etc. no cambian) ...
+# ... (El resto de tus vistas: historial_avance_view, etc. no cambian) ...
 def historial_avance_view(request, proyecto_id):
     proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
     semanas = Semana.objects.all()
@@ -145,7 +146,7 @@ class ActividadCreateView(CreateView):
                     messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
                     if formset.non_form_errors():
                         messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
-                    return self.form_invalid(form)
+                    return self.form_invalid(form) # Llama al método de abajo
 
                 formset.save()
                 messages.success(self.request, 'Actividad con metas por zona creada con éxito.')
@@ -158,6 +159,23 @@ class ActividadCreateView(CreateView):
              return self.form_invalid(form)
 
         return super().form_valid(form)
+
+    # --- MÉTODO AÑADIDO ---
+    def form_invalid(self, form):
+        """
+        Se llama cuando el formulario principal (ActividadForm) no es válido.
+        """
+        # Añade un mensaje de error general. Los errores específicos de cada campo
+        # se mostrarán automáticamente junto a los campos del formulario.
+        messages.error(self.request, 'El formulario es inválido. Por favor, revisa los campos marcados en rojo.')
+        
+        # También nos aseguramos de pasar el formset inválido (si existe) de vuelta a la plantilla
+        context = self.get_context_data(form=form)
+        if self.request.POST:
+            context['formset'] = MetaPorZonaFormSet(self.request.POST)
+        
+        return self.render_to_response(context)
+    # --- FIN MÉTODO AÑADIDO ---
 
     def get_initial(self):
         initial = super().get_initial()
@@ -190,12 +208,14 @@ class ActividadUpdateView(UpdateView):
 
         try:
             with transaction.atomic():
-                if not form.is_valid() or not formset.is_valid():
-                    if not formset.is_valid():
-                        messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
-                        if formset.non_form_errors():
-                            messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
-                    return self.form_invalid(form)
+                # --- LÓGICA MODIFICADA ---
+                # Se simplificó la comprobación de validez
+                if not formset.is_valid():
+                    messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
+                    if formset.non_form_errors():
+                        messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
+                    return self.form_invalid(form) # Llama al método de abajo
+                # --- FIN LÓGICA MODIFICADA ---
 
                 self.object = form.save()
                 formset.save()
@@ -210,6 +230,21 @@ class ActividadUpdateView(UpdateView):
              return self.form_invalid(form)
             
         return super().form_valid(form)
+
+    # --- MÉTODO AÑADIDO ---
+    def form_invalid(self, form):
+        """
+        Se llama cuando el formulario principal (ActividadForm) no es válido.
+        """
+        messages.error(self.request, 'El formulario es inválido. Por favor, revisa los campos marcados en rojo.')
+        
+        # Aseguramos que el formset se pase correctamente en caso de error
+        context = self.get_context_data(form=form)
+        if self.request.POST:
+            context['formset'] = MetaPorZonaFormSet(self.request.POST, instance=self.object)
+        
+        return self.render_to_response(context)
+    # --- FIN MÉTODO AÑADIDO ---
 
 def registrar_avance(request):
     proyecto = Proyecto.objects.first()
@@ -267,7 +302,10 @@ def registrar_avance(request):
                         messages.error(request, 'Por favor, corrige los errores en el desglose por zonas.')
                 
             except ValidationError:
-                pass 
+                # --- MENSAJE AÑADIDO ---
+                # El form.add_error se mostrará en el formulario, pero añadimos un mensaje global también
+                messages.error(request, "Debes registrar el avance para al menos una zona.")
+                # --- FIN MENSAJE AÑADIDO ---
             except IntegrityError:
                 messages.error(request, "Error de integridad. No se pudo guardar el avance.")
             except Exception as e:
@@ -306,6 +344,11 @@ def editar_avance(request, pk):
         try:
             with transaction.atomic():
                 if not form.is_valid() or not formset.is_valid():
+                    # --- LÓGICA DE MENSAJES AÑADIDA ---
+                    if not form.is_valid():
+                        messages.error(request, 'El formulario principal es inválido. Revisa los campos de actividad, fecha y empresa.')
+                    # --- FIN LÓGICA AÑADIDA ---
+                    
                     if not formset.is_valid():
                         messages.error(request, 'Por favor, corrige los errores en el desglose.')
                         if formset.non_form_errors():
@@ -323,7 +366,9 @@ def editar_avance(request, pk):
                 return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
 
         except ValidationError:
-            pass
+            # --- MENSAJE AÑADIDO ---
+            messages.error(request, "No puedes eliminar todas las zonas. Debe quedar al menos una.")
+            # --- FIN MENSAJE AÑADIDO ---
         except IntegrityError:
              messages.error(request, "Error de integridad al actualizar.")
         except Exception as e:
@@ -427,6 +472,10 @@ def vista_clima(request):
             reporte = obtener_y_guardar_clima(fecha_seleccionada)
             if not reporte:
                  messages.error(request, f"No se pudieron obtener los datos del clima para {fecha_seleccionada}.")
+        # --- BLOQUE AÑADIDO ---
+        else:
+            messages.error(request, "La fecha seleccionada no es válida. Por favor, corrígela.")
+        # --- FIN BLOQUE AÑADIDO ---
 
     contexto = {'form': form, 'reporte': reporte}
     return render(request, 'actividades/vista_clima.html', contexto)
@@ -567,40 +616,32 @@ def registrar_avance_bim(request):
 # --- 3. MODIFICAR VISTA DE API (ElementoStatusAPIView) ---
 class ElementoStatusAPIView(ListAPIView):
     """
-    API de solo lectura para exponer el estado de los elementos constructivos.
-    Ahora expone un objeto por CADA GUID, permitiendo que múltiples GUIDs
-    se vinculen al mismo estado de un ElementoConstructivo.
+    API de solo lectura para exponer el estado y fechas de los elementos constructivos.
     """
-    # Cambiar al nuevo serializador
     serializer_class = ElementoBIM_GUID_Serializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """
-        Optimiza la consulta:
-        1. Obtiene todos los GUIDs (ElementoBIM_GUID).
-        2. Se trae la información de su 'elemento_constructivo' padre (select_related).
-        3. Se trae la información del 'tipo_elemento' del padre (select_related).
-        4. Anota los conteos de pasos en el 'elemento_constructivo' padre
-           para que el serializador pueda acceder a 'status'.
+        Optimiza la consulta para traer GUIDs, Estado y Fecha de Terminación.
         """
-        # La consulta base ahora es sobre ElementoBIM_GUID
         return ElementoBIM_GUID.objects.select_related(
-            'elemento_constructivo', # Trae el ElementoConstructivo (padre)
-            'elemento_constructivo__tipo_elemento' # Trae el TipoElemento (abuelo)
+            'elemento_constructivo',
+            'elemento_constructivo__tipo_elemento'
         ).annotate(
-            # Anotamos los valores en el objeto.
-            # OJO: Los nombres 'total_pasos' y 'pasos_completados' deben coincidir
-            # con los nombres de @property en el modelo ElementoConstructivo
-            # para que el serializador los use correctamente.
+            # 1. Total de pasos definidos para este tipo de elemento
             total_pasos=Count(
                 'elemento_constructivo__tipo_elemento__pasos_proceso', 
                 distinct=True
             ),
+            # 2. Pasos que ya se han marcado como completados
             pasos_completados=Count(
                 'elemento_constructivo__avances_proceso', 
                 distinct=True
-            )
+            ),
+            # --- NUEVO: Obtener la fecha de finalización más reciente ---
+            # Esto busca en todos los avances de este elemento y toma la fecha mayor.
+            # Esa será nuestra "Fecha Fin Real" para el Timeliner.
+            ultima_fecha=Max('elemento_constructivo__avances_proceso__fecha_finalizacion')
         )
-# --- FIN MODIFICACIÓN ---
