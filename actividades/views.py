@@ -13,7 +13,7 @@ from django.core.exceptions import ValidationError
 
 # --- Importaciones para la NUEVA API (Paso 6) ---
 from rest_framework.generics import ListAPIView
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Min 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
 # --- 1. MODIFICADO: Importar el nuevo Serializer ---
@@ -623,25 +623,21 @@ class ElementoStatusAPIView(ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """
-        Optimiza la consulta para traer GUIDs, Estado y Fecha de Terminación.
-        """
         return ElementoBIM_GUID.objects.select_related(
             'elemento_constructivo',
             'elemento_constructivo__tipo_elemento'
         ).annotate(
-            # 1. Total de pasos definidos para este tipo de elemento
             total_pasos=Count(
                 'elemento_constructivo__tipo_elemento__pasos_proceso', 
                 distinct=True
             ),
-            # 2. Pasos que ya se han marcado como completados
             pasos_completados=Count(
                 'elemento_constructivo__avances_proceso', 
                 distinct=True
             ),
-            # --- NUEVO: Obtener la fecha de finalización más reciente ---
-            # Esto busca en todos los avances de este elemento y toma la fecha mayor.
-            # Esa será nuestra "Fecha Fin Real" para el Timeliner.
-            ultima_fecha=Max('elemento_constructivo__avances_proceso__fecha_finalizacion')
+            # Ya tenías la última fecha (Fin)
+            ultima_fecha=Max('elemento_constructivo__avances_proceso__fecha_finalizacion'),
+            
+            # [2] AGREGAMOS LA PRIMERA FECHA (Inicio)
+            primera_fecha=Min('elemento_constructivo__avances_proceso__fecha_finalizacion')
         )
