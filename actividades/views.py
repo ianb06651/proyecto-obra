@@ -538,73 +538,106 @@ def obtener_pasos_y_avance_elemento(request, elemento_id):
 
 def registrar_avance_bim(request):
     if request.method == 'POST':
-        elemento_id = request.POST.get('elemento_id_hidden')
-        if not elemento_id:
-            messages.error(request, ("No se seleccionó ningún elemento constructivo."))
+        # 1. Obtener la cadena de IDs (ej: "10,25,33")
+        elementos_ids_str = request.POST.get('elementos_ids', '')
+        
+        if not elementos_ids_str:
+            messages.error(request, "No se seleccionó ningún elemento.")
             return redirect('registrar_avance_bim')
 
+        # Convertir a lista de enteros
         try:
-            elemento = ElementoConstructivo.objects.get(pk=elemento_id)
-        except ElementoConstructivo.DoesNotExist:
-            messages.error(request, ("El elemento constructivo seleccionado ya no existe."))
-            return redirect('registrar_avance_bim')
+            ids_list = [int(id_str) for id_str in elementos_ids_str.split(',') if id_str.isdigit()]
+        except ValueError:
+             messages.error(request, "Error en los IDs de los elementos.")
+             return redirect('registrar_avance_bim')
 
+        if not ids_list:
+             messages.error(request, "Lista de elementos vacía.")
+             return redirect('registrar_avance_bim')
+
+        # 2. Obtener datos del formulario (Pasos y Fechas)
         pasos_ids_enviados = request.POST.getlist('paso_id')
         fechas_enviadas = request.POST.getlist('fecha_finalizacion')
 
         if len(pasos_ids_enviados) != len(fechas_enviadas):
-             messages.error(request, ("Error en los datos enviados. Inténtalo de nuevo."))
+             messages.error(request, "Error en los datos enviados.")
              return redirect('registrar_avance_bim') 
 
+        cantidad_actualizados = 0
         errores_guardado = []
-        try:
-            with transaction.atomic(): 
-                for paso_id_str, fecha_str in zip(pasos_ids_enviados, fechas_enviadas):
-                    try:
-                        paso_id = int(paso_id_str)
-                        paso = PasoProcesoTipoElemento.objects.get(pk=paso_id, tipo_elemento=elemento.tipo_elemento)
 
+        try:
+            with transaction.atomic():
+                # Validar que todos los elementos sean del mismo TipoElemento
+                # Usamos el tipo del primer elemento como referencia
+                primer_elemento = ElementoConstructivo.objects.get(pk=ids_list[0])
+                tipo_referencia = primer_elemento.tipo_elemento
+
+                elementos_queryset = ElementoConstructivo.objects.filter(pk__in=ids_list)
+                
+                # Verificación de seguridad de tipos
+                if elementos_queryset.filter(tipo_elemento=tipo_referencia).count() != len(ids_list):
+                    raise ValidationError("Todos los elementos seleccionados deben ser del mismo Tipo (ej. todos Columnas). No mezcles tipos.")
+
+                # 3. Iterar sobre CADA elemento seleccionado
+                for elemento in elementos_queryset:
+                    
+                    cambio_realizado_en_elemento = False
+
+                    # Iterar sobre los pasos enviados
+                    for paso_id_str, fecha_str in zip(pasos_ids_enviados, fechas_enviadas):
+                        # Solo procesamos si el usuario mandó una fecha (para actualizar)
+                        # OJO: En bulk update, si dejan la fecha vacía, NO borramos el avance existente,
+                        # simplemente lo ignoramos para no borrar datos accidentalmente en masa.
                         if fecha_str: 
                             try:
+                                paso_id = int(paso_id_str)
+                                paso = PasoProcesoTipoElemento.objects.get(pk=paso_id, tipo_elemento=tipo_referencia)
                                 fecha_obj = date.fromisoformat(fecha_str)
+                                
                                 if fecha_obj > date.today():
-                                     raise ValidationError(("La fecha para '%(paso)s' no puede ser futura.") % {'paso': paso.proceso.nombre})
+                                    raise ValidationError("La fecha no puede ser futura.")
 
-                                avance, created = AvanceProcesoElemento.objects.update_or_create(
+                                AvanceProcesoElemento.objects.update_or_create(
                                     elemento=elemento,
                                     paso_proceso=paso,
                                     defaults={'fecha_finalizacion': fecha_obj}
                                 )
-                            except ValueError:
-                                errores_guardado.append(("Formato de fecha inválido para '%(paso)s'. Use AAAA-MM-DD.") % {'paso': paso.proceso.nombre})
-                            except ValidationError as e:
-                                errores_guardado.append(e.message)
+                                cambio_realizado_en_elemento = True
 
-                        else: 
-                            AvanceProcesoElemento.objects.filter(elemento=elemento, paso_proceso=paso).delete()
-
-                    except (ValueError, PasoProcesoTipoElemento.DoesNotExist):
-                        errores_guardado.append(("Paso de proceso inválido o incompatible encontrado (ID: %(id)s).") % {'id': paso_id_str})
-                    except Exception as e: 
-                        errores_guardado.append(f"Error inesperado al procesar paso {paso_id_str}: {e}")
+                            except Exception as e:
+                                errores_guardado.append(f"Error en {elemento.identificador_unico}: {e}")
+                    
+                    if cambio_realizado_en_elemento:
+                        cantidad_actualizados += 1
 
                 if errores_guardado:
-                     raise ValidationError(errores_guardado) 
+                     raise ValidationError(errores_guardado)
 
-            messages.success(request, ("Avance para el elemento '%(elemento)s' guardado correctamente.") % {'elemento': elemento})
+            if cantidad_actualizados > 0:
+                messages.success(request, f"¡Éxito! Se actualizaron {cantidad_actualizados} elementos correctamente.")
+            else:
+                messages.warning(request, "No se realizaron cambios (las fechas estaban vacías).")
+
             return redirect('registrar_avance_bim')
 
         except ValidationError as e:
-            for error_msg in e.messages:
-                 messages.error(request, error_msg)
-            form = SeleccionarElementoForm(initial={'elemento': elemento})
+            if hasattr(e, 'message'):
+                 messages.error(request, e.message)
+            elif hasattr(e, 'messages'): # Para listas de errores
+                 for err in e.messages:
+                     messages.error(request, err)
+            else:
+                 messages.error(request, str(e))
+                 
+        except ElementoConstructivo.DoesNotExist:
+             messages.error(request, "Uno de los elementos seleccionados no existe.")
         except Exception as e: 
-            messages.error(request, f"Error al guardar los datos: {e}")
-            form = SeleccionarElementoForm() 
+            messages.error(request, f"Error inesperado: {e}")
 
-    else:
-        form = SeleccionarElementoForm()
-
+    # GET request
+    form = SeleccionarElementoForm()
     context = {
         'form': form,
         'url_buscar_elementos': reverse('api_buscar_elementos'),

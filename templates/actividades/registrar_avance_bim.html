@@ -1,17 +1,15 @@
 {% extends "base.html" %}
-{% load i18n %} {# Cargar la etiqueta i18n si usas traducciones #}
+{% load i18n %}
 
-{% block title %}{% trans "Registrar Avance por Elemento Constructivo (BIM)" %}{% endblock %}
+{% block title %}{% trans "Registrar Avance por Lotes (BIM)" %}{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>{% trans "Registrar Avance por Elemento (BIM)" %}</h2>
-        {# Puedes añadir un enlace para volver si lo necesitas #}
-        {# <a href="{% url 'pagina_principal' %}" class="btn btn-secondary">{% trans "Volver" %}</a> #}
+        <h2>{% trans "Registrar Avance Múltiple (BIM)" %}</h2>
     </div>
 
-    <p>{% trans "Selecciona un elemento constructivo usando el buscador. Luego, registra o actualiza las fechas de finalización para sus pasos de proceso correspondientes." %}</p>
+    <p>{% trans "Selecciona uno o varios elementos del MISMO TIPO (ej. varios Largeros). Se aplicarán las mismas fechas a todos." %}</p>
     <hr>
 
     {% if messages %}
@@ -25,182 +23,170 @@
 
     <div class="card">
         <div class="card-header">
-            <strong>{% trans "Selección y Registro de Avance" %}</strong>
+            <strong>{% trans "Selección Múltiple y Registro" %}</strong>
         </div>
         <div class="card-body">
             <form method="post" id="avance-bim-form">
                 {% csrf_token %}
 
-                {# 1. Campo de selección del Elemento (usaremos TomSelect) #}
+                {# 1. Campo de selección Múltiple #}
                 <div class="mb-4">
-                    <label for="{{ form.elemento.id_for_label }}" class="form-label">{{ form.elemento.label }}</label>
-                    {# Renderizamos el campo select original, TomSelect lo reemplazará #}
-                    {{ form.elemento }}
-                    {% if form.elemento.errors %}
-                        <div class="invalid-feedback d-block">{{ form.elemento.errors|first }}</div>
-                    {% endif %}
-                    <small class="form-text text-muted">{{ form.elemento.help_text }}</small>
+                    <label class="form-label">Buscar Elementos:</label>
+                    {# Agregamos el atributo multiple #}
+                    <select id="select-elementos-bim" multiple placeholder="Escribe para buscar (ej. Largero)..." autocomplete="off"></select>
+                    <small class="form-text text-muted">Puedes seleccionar múltiples elementos para registrar su avance simultáneamente.</small>
                 </div>
 
-                {# 2. Campo oculto para guardar el ID del elemento seleccionado #}
-                <input type="hidden" name="elemento_id_hidden" id="elemento_id_hidden">
+                {# 2. Campo oculto que almacenará los IDs separados por coma (ej: "10,14,25") #}
+                <input type="hidden" name="elementos_ids" id="elementos_ids_hidden">
 
-                {# 3. Contenedor donde JavaScript insertará los campos de fecha dinámicos #}
+                {# 3. Contenedor de pasos (Dinámico) #}
                 <div id="pasos-container" class="mt-4 border-top pt-4" style="display: none;">
-                    <h4>{% trans "Pasos del Proceso Constructivo" %}</h4>
-                    <p><small>{% trans "Introduce la fecha de finalización (AAAA-MM-DD) para cada paso completado. Deja en blanco si aún no se completa o para borrar una fecha existente." %}</small></p>
-                    {# Aquí se añadirán dinámicamente los labels y inputs de fecha #}
+                    <h4 id="titulo-pasos">{% trans "Pasos del Proceso Constructivo" %}</h4>
+                    <p><small>{% trans "Introduce la fecha de finalización. Se aplicará a TODOS los elementos seleccionados." %}</small></p>
+                    
                     <div id="dynamic-fields-target">
-                        {# Indicador de carga inicial #}
                         <p id="loading-indicator" style="display: none;"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {% trans "Cargando pasos..." %}</p>
                     </div>
                 </div>
 
-                {# 4. Botón de Guardar (se habilita cuando se selecciona un elemento) #}
                 <hr>
-                <button type="submit" class="btn btn-primary" id="save-button" disabled>{% trans "Guardar Avance" %}</button>
+                <button type="submit" class="btn btn-primary" id="save-button" disabled>{% trans "Guardar Avance en Lote" %}</button>
             </form>
         </div>
     </div>
 </div>
 
-{# Incluir TomSelect CSS y JS (puedes descargarlos o usar CDN) #}
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const elementoSelectElement = document.getElementById('{{ form.elemento.id_for_label }}'); // ID del <select> original
-    const elementoIdHiddenInput = document.getElementById('elemento_id_hidden');
+    const selectElement = document.getElementById('select-elementos-bim');
+    const hiddenInput = document.getElementById('elementos_ids_hidden');
     const pasosContainer = document.getElementById('pasos-container');
     const dynamicFieldsTarget = document.getElementById('dynamic-fields-target');
     const saveButton = document.getElementById('save-button');
     const loadingIndicator = document.getElementById('loading-indicator');
 
-    // URLs pasadas desde el contexto de la vista Django
     const searchUrl = '{{ url_buscar_elementos }}';
     const urlTemplate = '{{ url_obtener_pasos_base }}';
 
-    // --- Inicialización de TomSelect ---
-    const tomSelect = new TomSelect(elementoSelectElement, {
-        valueField: 'id', // El valor a enviar será el 'id' del JSON
-        labelField: 'text', // El texto a mostrar será el 'text' del JSON
-        searchField: 'text', // Buscar dentro del campo 'text'
-        create: false, // No permitir crear nuevos elementos
-        load: function(query, callback) {
-            // No cargar si la consulta es muy corta
-            if (!query.length || query.length < 2) return callback();
+    // Variable para rastrear el tipo de elemento del primer item seleccionado
+    // Esto es para evitar mezclar tipos (ej. Zapatas con Columnas)
+    let currentFirstElementId = null; 
 
-            // Hacer la llamada AJAX a la API de búsqueda
+    const tomSelect = new TomSelect(selectElement, {
+        valueField: 'id',
+        labelField: 'text',
+        searchField: 'text',
+        maxItems: null, // ¡Permite selección infinita!
+        plugins: ['remove_button'], // Botón 'x' para quitar elementos
+        load: function(query, callback) {
+            if (!query.length || query.length < 2) return callback();
             fetch(`${searchUrl}?term=${encodeURIComponent(query)}`)
                 .then(response => response.json())
-                .then(json => {
-                    callback(json); // Pasar los resultados a TomSelect
-                }).catch(()=>{
-                    callback(); // Indicar que la carga falló
-                });
+                .then(json => callback(json))
+                .catch(()=>{ callback(); });
         },
         render: {
-            // Personalizar cómo se muestra la opción y el item seleccionado
-            option: function(item, escape) {
-                return `<div>${escape(item.text)}</div>`;
-            },
-            item: function(item, escape) {
-                return `<div>${escape(item.text)}</div>`;
-            }
+            option: function(item, escape) { return `<div>${escape(item.text)}</div>`; },
+            item: function(item, escape) { return `<div>${escape(item.text)}</div>`; }
         },
-        placeholder: '{% trans "Escribe para buscar..." %}', // Placeholder inicial
-        // preload: true, // Descomenta si quieres cargar opciones iniciales (puede ser lento si hay muchos elementos)
-        onChange: function(value) {
-            // Cuando se SELECCIONA un elemento
-            if (value) {
-                elementoIdHiddenInput.value = value; // Guarda el ID en el campo oculto
-                fetchPasosYAvance(value); // Llama a la función para cargar los pasos
-                saveButton.disabled = false; // Habilita el botón de guardar
+        onChange: function(values) {
+            // values es un array de strings ["1", "5", "9"]
+            
+            if (values && values.length > 0) {
+                // Actualizar input oculto para enviarlo al backend
+                hiddenInput.value = values.join(',');
+
+                // Usamos el PRIMER elemento seleccionado para cargar la estructura de pasos
+                // Asumimos que el usuario es responsable y selecciona elementos del mismo tipo.
+                // El backend hará la validación final.
+                const firstId = values[0];
+                
+                // Si cambiamos de 0 a 1 elemento, o si el primer elemento cambió (podría ser otro tipo)
+                if (currentFirstElementId !== firstId) {
+                    currentFirstElementId = firstId;
+                    fetchPasosYAvance(firstId); 
+                }
+                
+                saveButton.disabled = false;
             } else {
-                // Cuando se DESELECCIONA un elemento
-                elementoIdHiddenInput.value = '';
-                pasosContainer.style.display = 'none'; // Oculta el contenedor de pasos
-                dynamicFieldsTarget.innerHTML = ''; // Limpia los campos dinámicos
-                saveButton.disabled = true; // Deshabilita el botón de guardar
+                // Si borra todo
+                hiddenInput.value = '';
+                pasosContainer.style.display = 'none';
+                dynamicFieldsTarget.innerHTML = '';
+                saveButton.disabled = true;
+                currentFirstElementId = null;
             }
         }
     });
 
-    // --- Función para Cargar Pasos y Avance ---
     function fetchPasosYAvance(elementoId) {
-        // Mostrar indicador de carga y limpiar campos previos
         loadingIndicator.style.display = 'block';
-        dynamicFieldsTarget.innerHTML = ''; // Limpiar campos existentes
-        pasosContainer.style.display = 'block'; // Mostrar contenedor
+        dynamicFieldsTarget.innerHTML = ''; 
+        pasosContainer.style.display = 'block';
 
         const url = urlTemplate.replace('0', elementoId);
 
         fetch(url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
+            .then(response => response.json())
             .then(data => {
-                loadingIndicator.style.display = 'none'; // Ocultar indicador
+                loadingIndicator.style.display = 'none';
                 if (data.pasos && data.pasos.length > 0) {
-                    renderDynamicFields(data.pasos); // Llama a la función para crear los campos HTML
+                    renderDynamicFields(data.pasos);
                 } else {
-                    dynamicFieldsTarget.innerHTML = '<p class="text-muted">{% trans "No hay pasos definidos para este tipo de elemento." %}</p>';
+                    dynamicFieldsTarget.innerHTML = '<p class="text-muted">{% trans "No hay pasos definidos." %}</p>';
                 }
             })
             .catch(error => {
-                loadingIndicator.style.display = 'none'; // Ocultar indicador
-                console.error('Error fetching pasos:', error);
-                dynamicFieldsTarget.innerHTML = `<p class="text-danger">{% trans "Error al cargar los pasos del proceso." %}</p>`;
-                saveButton.disabled = true; // Deshabilitar guardar si hay error
+                loadingIndicator.style.display = 'none';
+                console.error(error);
             });
     }
 
-    // --- Función para Renderizar los Campos Dinámicos ---
     function renderDynamicFields(pasos) {
-        dynamicFieldsTarget.innerHTML = ''; // Limpiar por si acaso
+        dynamicFieldsTarget.innerHTML = '';
+        
+        // Nota: Al ser múltiple, NO pre-llenamos fechas (value), 
+        // porque los elementos podrían tener estados diferentes.
+        // Dejamos los campos vacíos para registrar NUEVOS avances.
+        
+        const alertInfo = document.createElement('div');
+        alertInfo.className = "alert alert-warning py-2";
+        alertInfo.innerHTML = "<small>Nota: Al editar múltiples elementos, los campos aparecen vacíos. Ingresa una fecha solo donde quieras actualizar el avance.</small>";
+        dynamicFieldsTarget.appendChild(alertInfo);
 
         pasos.forEach(paso => {
             const div = document.createElement('div');
-            div.classList.add('mb-3', 'row', 'align-items-center');
+            div.className = 'mb-3 row align-items-center';
 
-            // Label
             const label = document.createElement('label');
-            label.classList.add('col-sm-4', 'col-form-label');
-            label.setAttribute('for', `fecha_paso_${paso.paso_id}`);
+            label.className = 'col-sm-4 col-form-label';
             label.textContent = `${paso.orden}. ${paso.nombre_proceso}:`;
             div.appendChild(label);
 
-            // Contenedor del Input
             const inputDiv = document.createElement('div');
-            inputDiv.classList.add('col-sm-8');
+            inputDiv.className = 'col-sm-8';
 
-            // Input oculto para el ID del paso
             const hiddenInput = document.createElement('input');
-            hiddenInput.setAttribute('type', 'hidden');
-            hiddenInput.setAttribute('name', 'paso_id');
-            hiddenInput.setAttribute('value', paso.paso_id);
-            inputDiv.appendChild(hiddenInput); // Importante añadirlo
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'paso_id';
+            hiddenInput.value = paso.paso_id;
+            inputDiv.appendChild(hiddenInput);
 
-            // Input de Fecha
             const dateInput = document.createElement('input');
-            dateInput.setAttribute('type', 'date');
-            dateInput.classList.add('form-control', 'form-control-sm');
-            dateInput.setAttribute('id', `fecha_paso_${paso.paso_id}`);
-            dateInput.setAttribute('name', 'fecha_finalizacion'); // Nombre que espera la vista Django
-            if (paso.fecha_guardada) {
-                dateInput.value = paso.fecha_guardada; // Pre-llenar con la fecha guardada
-            }
+            dateInput.type = 'date';
+            dateInput.className = 'form-control form-control-sm';
+            dateInput.name = 'fecha_finalizacion';
+            // NO establecemos value = paso.fecha_guardada para evitar confusiones en bulk
+            
             inputDiv.appendChild(dateInput);
-
             div.appendChild(inputDiv);
             dynamicFieldsTarget.appendChild(div);
         });
     }
-
 });
 </script>
 {% endblock %}
