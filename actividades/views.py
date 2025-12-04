@@ -10,17 +10,13 @@ from django.urls import reverse_lazy, reverse
 from datetime import date, timedelta
 from django.db import IntegrityError, transaction
 from django.core.exceptions import ValidationError 
-
-# --- Importaciones para la NUEVA API (Paso 6) ---
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 from rest_framework.generics import ListAPIView
 from django.db.models import Count, Max, Min 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
-# --- 1. MODIFICADO: Importar el nuevo Serializer ---
 from .serializers import ElementoBIM_GUID_Serializer
-# --- Fin importaciones API ---
-
-
 from .forms import (
     ReporteMaquinariaForm, ReportePersonalForm, ActividadForm,
     ConsultaClimaForm, AvanceDiarioForm, AvancePorZonaFormSet,
@@ -32,10 +28,9 @@ from .models import (
     Empresa, Cargo, AreaDeTrabajo, ReporteDiarioMaquinaria, Proyecto,
     AvancePorZona, MetaPorZona, ElementoConstructivo, 
     PasoProcesoTipoElemento, AvanceProcesoElemento, TipoElemento,
-    ElementoBIM_GUID # <--- IMPORTAR EL NUEVO MODELO
+    ElementoBIM_GUID
 )
 
-# --- Vistas sin cambios funcionales directos ---
 def es_staff(user):
     """
     Función de prueba para el decorador user_passes_test.
@@ -62,9 +57,16 @@ def historial_avance_view(request, proyecto_id):
         fecha_reporte__lte=fecha_corte_total
     ).prefetch_related(prefetch_zonas_anidadas) 
 
-
     total_real_ev_acumulado = sum(avance.cantidad_total for avance in avances_totales_acumulados)
-    spi_acumulado = (total_real_ev_acumulado / total_programado_pv_acumulado) if total_programado_pv_acumulado and total_programado_pv_acumulado > 0 else 0
+    
+    # --- MODIFICACIÓN: CÁLCULO DE SPI CON TOPE DE 2.0 ---
+    # Esto evita valores astronómicos al inicio de la obra
+    if total_programado_pv_acumulado and total_programado_pv_acumulado > 0:
+        spi_calculado = total_real_ev_acumulado / total_programado_pv_acumulado
+        spi_acumulado = min(spi_calculado, 2.0) # Aquí está el límite
+    else:
+        spi_acumulado = 0
+    # ----------------------------------------------------
 
     semana_seleccionada_id = request.GET.get('semana_filtro')
     actividad_seleccionada_id = request.GET.get('actividad_filtro')
@@ -102,7 +104,7 @@ def historial_avance_view(request, proyecto_id):
         'actividad_seleccionada_id': actividad_seleccionada_id,
         'total_programado_pv': total_programado_pv_acumulado,
         'total_real_ev': total_real_ev_acumulado,
-        'rendimiento_spi': spi_acumulado,
+        'rendimiento_spi': spi_acumulado, # Pasamos el valor ya limitado
         'fecha_corte': fecha_corte_total,
         'avances_reales': avances_para_tabla.order_by('-fecha_reporte')
     }
@@ -674,3 +676,78 @@ class ElementoStatusAPIView(ListAPIView):
             # [2] AGREGAMOS LA PRIMERA FECHA (Inicio)
             primera_fecha=Min('elemento_constructivo__avances_proceso__fecha_finalizacion')
         )
+            
+@require_GET
+def api_generar_rango(request):
+    """
+    API que genera una lista de códigos basada en un patrón (ej. 'ZC-{}AA')
+    y un rango (numérico o alfabético), y devuelve los IDs encontrados en la BD.
+    """
+    patron = request.GET.get('patron', '')    # Ej: "ZA-B{}"
+    tipo_rango = request.GET.get('tipo', 'numero') # 'numero' o 'letra'
+    inicio = request.GET.get('inicio', '')
+    fin = request.GET.get('fin', '')
+    usar_ceros = request.GET.get('ceros') == 'true' # 'true' o 'false'
+
+    # 1. Validaciones básicas
+    if not patron or not inicio or not fin:
+        return JsonResponse({'error': 'Faltan parámetros (patrón, inicio o fin).'}, status=400)
+    
+    if '{}' not in patron:
+         return JsonResponse({'error': 'El patrón debe incluir "{}" donde cambia el valor.'}, status=400)
+
+    candidatos = []
+
+    try:
+        # 2. Generación de candidatos según el tipo
+        if tipo_rango == 'numero':
+            start_int = int(inicio)
+            end_int = int(fin)
+            
+            if start_int > end_int:
+                return JsonResponse({'error': 'El inicio numérico debe ser menor al fin.'}, status=400)
+            
+            # Generamos la secuencia (ej. 101, 102... 110)
+            for i in range(start_int, end_int + 1):
+                # Si piden ceros (ej. 01, 02), usamos zfill(2). 
+                # Si el número ya es 100, zfill(2) no le hace nada (correcto).
+                val = str(i).zfill(2) if usar_ceros else str(i)
+                candidatos.append(patron.format(val))
+
+        elif tipo_rango == 'letra':
+            # Solo permitimos 1 letra para simplificar
+            if len(inicio) != 1 or len(fin) != 1:
+                return JsonResponse({'error': 'Para rangos de letras, usa solo un caracter (Ej: A a F).'}, status=400)
+                
+            start_ord = ord(inicio.upper())
+            end_ord = ord(fin.upper())
+            
+            if start_ord > end_ord:
+                return JsonResponse({'error': 'La letra inicial debe ir antes que la final en el alfabeto.'}, status=400)
+            
+            for i in range(start_ord, end_ord + 1):
+                val = chr(i) # Convertir código ASCII de vuelta a Letra
+                candidatos.append(patron.format(val))
+        
+        else:
+             return JsonResponse({'error': 'Tipo de rango no válido.'}, status=400)
+
+    except ValueError:
+        return JsonResponse({'error': 'Los valores de inicio/fin no son válidos para el tipo seleccionado.'}, status=400)
+
+    # 3. Consultar Base de Datos
+    # Buscamos cuáles de estos "candidatos" existen realmente
+    elementos_encontrados = ElementoConstructivo.objects.filter(
+        identificador_unico__in=candidatos
+    ).values('id', 'identificador_unico')
+
+    data = list(elementos_encontrados)
+    
+    # Formatear para TomSelect (id, text)
+    resultados_json = [{'id': e['id'], 'text': e['identificador_unico']} for e in data]
+
+    return JsonResponse({
+        'encontrados': len(resultados_json),
+        'buscados': len(candidatos),
+        'resultados': resultados_json
+    })

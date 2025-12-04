@@ -1,192 +1,311 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% trans "Registrar Avance por Lotes (BIM)" %}{% endblock %}
+{% block title %}Gestión de Avance BIM{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>{% trans "Registrar Avance Múltiple (BIM)" %}</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{% trans "Gestión de Avance BIM" %}</h2>
     </div>
-
-    <p>{% trans "Selecciona uno o varios elementos del MISMO TIPO (ej. varios Largeros). Se aplicarán las mismas fechas a todos." %}</p>
-    <hr>
 
     {% if messages %}
         {% for message in messages %}
-            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} alert-dismissible fade show" role="alert">
+            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} alert-dismissible fade show">
                 {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         {% endfor %}
     {% endif %}
 
-    <div class="card">
-        <div class="card-header">
-            <strong>{% trans "Selección Múltiple y Registro" %}</strong>
-        </div>
-        <div class="card-body">
-            <form method="post" id="avance-bim-form">
-                {% csrf_token %}
+    <ul class="nav nav-tabs mb-4" id="bimTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold" id="masivo-tab" data-bs-toggle="tab" data-bs-target="#masivo-content" type="button" role="tab">
+                <i class="bi bi-collection"></i> Registro por Lote (Masivo)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual-content" type="button" role="tab">
+                <i class="bi bi-pencil-square"></i> Edición Individual (Ver/Editar)
+            </button>
+        </li>
+    </ul>
 
-                {# 1. Campo de selección Múltiple #}
-                <div class="mb-4">
-                    <label class="form-label">Buscar Elementos:</label>
-                    {# Agregamos el atributo multiple #}
-                    <select id="select-elementos-bim" multiple placeholder="Escribe para buscar (ej. Largero)..." autocomplete="off"></select>
-                    <small class="form-text text-muted">Puedes seleccionar múltiples elementos para registrar su avance simultáneamente.</small>
+    <div class="tab-content" id="bimTabsContent">
+        
+        <div class="tab-pane fade show active" id="masivo-content" role="tabpanel">
+            
+            <div class="card shadow-sm mb-4 border-primary border-opacity-25">
+                <div class="card-header bg-primary bg-opacity-10 text-primary">
+                    <strong><i class="bi bi-grid-3x3"></i> Generador por Cruce de Ejes</strong>
                 </div>
-
-                {# 2. Campo oculto que almacenará los IDs separados por coma (ej: "10,14,25") #}
-                <input type="hidden" name="elementos_ids" id="elementos_ids_hidden">
-
-                {# 3. Contenedor de pasos (Dinámico) #}
-                <div id="pasos-container" class="mt-4 border-top pt-4" style="display: none;">
-                    <h4 id="titulo-pasos">{% trans "Pasos del Proceso Constructivo" %}</h4>
-                    <p><small>{% trans "Introduce la fecha de finalización. Se aplicará a TODOS los elementos seleccionados." %}</small></p>
-                    
-                    <div id="dynamic-fields-target">
-                        <p id="loading-indicator" style="display: none;"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {% trans "Cargando pasos..." %}</p>
+                <div class="card-body bg-light">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Patrón (Ej: ZC-{}AA)</label>
+                            <div class="input-group">
+                                <input type="text" id="rango-patron" class="form-control" placeholder="Ej: ZC-{}AA">
+                                <button class="btn btn-outline-secondary" type="button" onclick="insertarPlaceholder()">Ins. "{}"</button>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Tipo</label>
+                            <select id="rango-tipo" class="form-select" onchange="cambiarInputsRango()">
+                                <option value="numero">Numérico</option>
+                                <option value="letra">Letra</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Desde</label>
+                            <input type="number" id="rango-inicio" class="form-control" placeholder="101">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Hasta</label>
+                            <input type="number" id="rango-fin" class="form-control" placeholder="110">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" id="btn-generar-rango" class="btn btn-primary w-100">
+                                <span id="spinner-rango" class="spinner-border spinner-border-sm d-none"></span> Buscar
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-2" id="div-ceros">
+                        <div class="col-12">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" id="check-ceros">
+                                <label class="form-check-label small text-muted" for="check-ceros">Usar ceros (01, 02...)</label>
+                            </div>
+                        </div>
                     </div>
                 </div>
+            </div>
 
-                <hr>
-                <button type="submit" class="btn btn-primary" id="save-button" disabled>{% trans "Guardar Avance en Lote" %}</button>
-            </form>
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="post" id="form-masivo">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Elementos Seleccionados:</label>
+                            <select id="select-masivo" multiple placeholder="Busca o genera elementos..." autocomplete="off"></select>
+                            <input type="hidden" name="elementos_ids" id="hidden-masivo">
+                        </div>
+
+                        <div id="container-masivo" class="mt-4 border-top pt-3" style="display: none;">
+                            <div class="alert alert-warning py-2">
+                                <small><i class="bi bi-info-circle"></i> Los campos vacíos se ignorarán. La fecha ingresada sobrescribirá a <strong>TODOS</strong> los seleccionados.</small>
+                            </div>
+                            <div id="target-masivo"></div>
+                            <button type="submit" class="btn btn-primary mt-3" id="btn-save-masivo" disabled>Guardar Lote</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
+
+        <div class="tab-pane fade" id="individual-content" role="tabpanel">
+            <div class="card shadow-sm border-success border-opacity-25">
+                <div class="card-header bg-success bg-opacity-10 text-success">
+                    <strong><i class="bi bi-search"></i> Buscar Elemento Específico</strong>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="form-individual">
+                        {% csrf_token %}
+                        
+                        <div class="mb-4">
+                            <label class="form-label">Busca un elemento para ver su historial:</label>
+                            <select id="select-individual" placeholder="Escribe código (ej. ZC-101)..." autocomplete="off"></select>
+                            <input type="hidden" name="elementos_ids" id="hidden-individual">
+                        </div>
+
+                        <div id="container-individual" class="mt-4 border-top pt-3" style="display: none;">
+                            <h5 class="text-success mb-3">Historial del Elemento</h5>
+                            <div id="target-individual"></div>
+                            
+                            <div class="d-flex justify-content-between align-items-center mt-4">
+                                <small class="text-muted">Modifica las fechas y pulsa guardar para actualizar.</small>
+                                <button type="submit" class="btn btn-success" id="btn-save-individual">Actualizar Elemento</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const selectElement = document.getElementById('select-elementos-bim');
-    const hiddenInput = document.getElementById('elementos_ids_hidden');
-    const pasosContainer = document.getElementById('pasos-container');
-    const dynamicFieldsTarget = document.getElementById('dynamic-fields-target');
-    const saveButton = document.getElementById('save-button');
-    const loadingIndicator = document.getElementById('loading-indicator');
+    // URLS GLOBALES
+    const URL_BUSCAR = '{{ url_buscar_elementos }}';
+    const URL_PASOS_BASE = '{{ url_obtener_pasos_base }}'; // /api/elemento/0/pasos/
+    const URL_API_RANGO = '{% url "api_generar_rango" %}';
 
-    const searchUrl = '{{ url_buscar_elementos }}';
-    const urlTemplate = '{{ url_obtener_pasos_base }}';
-
-    // Variable para rastrear el tipo de elemento del primer item seleccionado
-    // Esto es para evitar mezclar tipos (ej. Zapatas con Columnas)
-    let currentFirstElementId = null; 
-
-    const tomSelect = new TomSelect(selectElement, {
-        valueField: 'id',
-        labelField: 'text',
-        searchField: 'text',
-        maxItems: null, // ¡Permite selección infinita!
-        plugins: ['remove_button'], // Botón 'x' para quitar elementos
-        load: function(query, callback) {
-            if (!query.length || query.length < 2) return callback();
-            fetch(`${searchUrl}?term=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(json => callback(json))
-                .catch(()=>{ callback(); });
-        },
-        render: {
-            option: function(item, escape) { return `<div>${escape(item.text)}</div>`; },
-            item: function(item, escape) { return `<div>${escape(item.text)}</div>`; }
-        },
-        onChange: function(values) {
-            // values es un array de strings ["1", "5", "9"]
-            
-            if (values && values.length > 0) {
-                // Actualizar input oculto para enviarlo al backend
-                hiddenInput.value = values.join(',');
-
-                // Usamos el PRIMER elemento seleccionado para cargar la estructura de pasos
-                // Asumimos que el usuario es responsable y selecciona elementos del mismo tipo.
-                // El backend hará la validación final.
-                const firstId = values[0];
-                
-                // Si cambiamos de 0 a 1 elemento, o si el primer elemento cambió (podría ser otro tipo)
-                if (currentFirstElementId !== firstId) {
-                    currentFirstElementId = firstId;
-                    fetchPasosYAvance(firstId); 
-                }
-                
-                saveButton.disabled = false;
-            } else {
-                // Si borra todo
-                hiddenInput.value = '';
-                pasosContainer.style.display = 'none';
-                dynamicFieldsTarget.innerHTML = '';
-                saveButton.disabled = true;
-                currentFirstElementId = null;
-            }
-        }
-    });
-
-    function fetchPasosYAvance(elementoId) {
-        loadingIndicator.style.display = 'block';
-        dynamicFieldsTarget.innerHTML = ''; 
-        pasosContainer.style.display = 'block';
-
-        const url = urlTemplate.replace('0', elementoId);
+    // ==========================================
+    // LÓGICA COMÚN
+    // ==========================================
+    
+    // Función genérica para cargar pasos
+    // prefill = true -> Pone las fechas existentes (Modo Individual)
+    // prefill = false -> Deja inputs vacíos (Modo Masivo)
+    function fetchAndRender(elementoId, targetDiv, prefill) {
+        targetDiv.innerHTML = '<p class="text-muted"><span class="spinner-border spinner-border-sm"></span> Cargando datos...</p>';
+        
+        const url = URL_PASOS_BASE.replace('0', elementoId);
 
         fetch(url)
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
-                loadingIndicator.style.display = 'none';
                 if (data.pasos && data.pasos.length > 0) {
-                    renderDynamicFields(data.pasos);
+                    renderizarInputs(data.pasos, targetDiv, prefill);
                 } else {
-                    dynamicFieldsTarget.innerHTML = '<p class="text-muted">{% trans "No hay pasos definidos." %}</p>';
+                    targetDiv.innerHTML = '<div class="alert alert-secondary">Sin pasos definidos.</div>';
                 }
             })
-            .catch(error => {
-                loadingIndicator.style.display = 'none';
-                console.error(error);
-            });
+            .catch(err => console.error(err));
     }
 
-    function renderDynamicFields(pasos) {
-        dynamicFieldsTarget.innerHTML = '';
+    function renderizarInputs(pasos, container, prefill) {
+        container.innerHTML = '';
         
-        // Nota: Al ser múltiple, NO pre-llenamos fechas (value), 
-        // porque los elementos podrían tener estados diferentes.
-        // Dejamos los campos vacíos para registrar NUEVOS avances.
-        
-        const alertInfo = document.createElement('div');
-        alertInfo.className = "alert alert-warning py-2";
-        alertInfo.innerHTML = "<small>Nota: Al editar múltiples elementos, los campos aparecen vacíos. Ingresa una fecha solo donde quieras actualizar el avance.</small>";
-        dynamicFieldsTarget.appendChild(alertInfo);
-
         pasos.forEach(paso => {
-            const div = document.createElement('div');
-            div.className = 'mb-3 row align-items-center';
-
-            const label = document.createElement('label');
-            label.className = 'col-sm-4 col-form-label';
-            label.textContent = `${paso.orden}. ${paso.nombre_proceso}:`;
-            div.appendChild(label);
-
-            const inputDiv = document.createElement('div');
-            inputDiv.className = 'col-sm-8';
-
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'paso_id';
-            hiddenInput.value = paso.paso_id;
-            inputDiv.appendChild(hiddenInput);
+            const row = document.createElement('div');
+            row.className = 'row mb-2 align-items-center border-bottom pb-2';
+            
+            // Columna Nombre
+            const colLabel = document.createElement('div');
+            colLabel.className = 'col-md-5';
+            // Si hay fecha guardada y estamos en modo prefill, mostramos un badge
+            let badge = '';
+            if (prefill && paso.fecha_guardada) {
+                badge = ' <span class="badge bg-success ms-2"><i class="bi bi-check"></i> Completado</span>';
+            }
+            colLabel.innerHTML = `<label class="fw-bold text-dark">${paso.orden}. ${paso.nombre_proceso}</label>${badge}`;
+            
+            // Columna Input
+            const colInput = document.createElement('div');
+            colInput.className = 'col-md-7';
+            
+            const hiddenId = document.createElement('input');
+            hiddenId.type = 'hidden';
+            hiddenId.name = 'paso_id';
+            hiddenId.value = paso.paso_id;
 
             const dateInput = document.createElement('input');
             dateInput.type = 'date';
-            dateInput.className = 'form-control form-control-sm';
+            dateInput.className = 'form-control';
             dateInput.name = 'fecha_finalizacion';
-            // NO establecemos value = paso.fecha_guardada para evitar confusiones en bulk
             
-            inputDiv.appendChild(dateInput);
-            div.appendChild(inputDiv);
-            dynamicFieldsTarget.appendChild(div);
+            // LA MAGIA: Si prefill es true, ponemos el valor que viene de la BD
+            if (prefill && paso.fecha_guardada) {
+                dateInput.value = paso.fecha_guardada;
+            }
+
+            colInput.appendChild(hiddenId);
+            colInput.appendChild(dateInput);
+            
+            row.appendChild(colLabel);
+            row.appendChild(colInput);
+            
+            container.appendChild(row);
         });
     }
-});
+
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        // ==========================================
+        // MODO 1: MASIVO (Tu código anterior adaptado)
+        // ==========================================
+        let tomMasivo = new TomSelect('#select-masivo', {
+            valueField: 'id', labelField: 'text', searchField: 'text',
+            maxItems: null, plugins: ['remove_button', 'clear_button'],
+            load: function(q, cb) { 
+                if(q.length < 2) return cb();
+                fetch(`${URL_BUSCAR}?term=${encodeURIComponent(q)}`).then(r=>r.json()).then(cb).catch(()=>{cb()});
+            },
+            onChange: function(values) {
+                document.getElementById('hidden-masivo').value = values ? values.join(',') : '';
+                const container = document.getElementById('container-masivo');
+                const btn = document.getElementById('btn-save-masivo');
+                
+                if (values && values.length > 0) {
+                    container.style.display = 'block';
+                    btn.disabled = false;
+                    // Usamos el primero para cargar la estructura, prefill = false
+                    fetchAndRender(values[0], document.getElementById('target-masivo'), false);
+                } else {
+                    container.style.display = 'none';
+                    btn.disabled = true;
+                }
+            }
+        });
+
+        // Generador de Rangos (Lógica idéntica a la anterior)
+        document.getElementById('btn-generar-rango').addEventListener('click', function() {
+            const btn = this;
+            const spinner = document.getElementById('spinner-rango');
+            const p = document.getElementById('rango-patron').value;
+            const t = document.getElementById('rango-tipo').value;
+            const i = document.getElementById('rango-inicio').value;
+            const f = document.getElementById('rango-fin').value;
+            const c = document.getElementById('check-ceros').checked;
+
+            if(!p || !i || !f) return alert("Faltan datos");
+            
+            spinner.classList.remove('d-none');
+            btn.disabled = true;
+
+            const params = new URLSearchParams({patron:p, tipo:t, inicio:i, fin:f, ceros:c});
+            fetch(`${URL_API_RANGO}?${params}`).then(r=>r.json()).then(d=>{
+                if(d.resultados) {
+                    d.resultados.forEach(item => { tomMasivo.addOption(item); tomMasivo.addItem(item.id); });
+                } else { alert(d.error || "Sin resultados"); }
+            }).finally(()=>{ spinner.classList.add('d-none'); btn.disabled = false; });
+        });
+
+        // ==========================================
+        // MODO 2: INDIVIDUAL (Nueva Lógica)
+        // ==========================================
+        let tomIndividual = new TomSelect('#select-individual', {
+            valueField: 'id', labelField: 'text', searchField: 'text',
+            maxItems: 1, // Solo permite 1 selección
+            plugins: ['clear_button'],
+            load: function(q, cb) { 
+                if(q.length < 2) return cb();
+                fetch(`${URL_BUSCAR}?term=${encodeURIComponent(q)}`).then(r=>r.json()).then(cb).catch(()=>{cb()});
+            },
+            onChange: function(value) {
+                // value es un string único aquí, no un array
+                document.getElementById('hidden-individual').value = value;
+                const container = document.getElementById('container-individual');
+                
+                if (value) {
+                    container.style.display = 'block';
+                    // prefill = true (Muestra las fechas existentes)
+                    fetchAndRender(value, document.getElementById('target-individual'), true);
+                } else {
+                    container.style.display = 'none';
+                }
+            }
+        });
+
+    });
+
+    // Helpers UI
+    function insertarPlaceholder() {
+        const i = document.getElementById('rango-patron'); i.value+="{}"; i.focus();
+    }
+    function cambiarInputsRango() {
+        const t = document.getElementById('rango-tipo').value;
+        const i = document.getElementById('rango-inicio');
+        const f = document.getElementById('rango-fin');
+        const c = document.getElementById('div-ceros');
+        i.value=''; f.value='';
+        if(t==='numero'){ i.type='number'; f.type='number'; i.placeholder='101'; c.style.display='block'; }
+        else { i.type='text'; f.type='text'; i.placeholder='A'; c.style.display='none'; }
+    }
 </script>
 {% endblock %}

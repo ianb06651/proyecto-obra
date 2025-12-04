@@ -41,4 +41,6 @@ urlpatterns = [
     path('api/elemento/<int:elemento_id>/pasos/',
          views.obtener_pasos_y_avance_elemento,
          name='api_obtener_pasos'),
+    
+    path('api/generar-rango/', views.api_generar_rango, name='api_generar_rango'),
 ]
