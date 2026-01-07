@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Cronograma Maestro{% endblock %}
+
+{% block content %}
+<style>
+    /* Nivel 2 (ZONA): Azul Oscuro */
+    tr.fila-nivel-2 > td {
+        background-color: #2F5597 !important; 
+        color: white !important;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    /* Nivel 3 (ACTIVIDAD): Blanco */
+    tr.fila-nivel-3 > td {
+        background-color: #ffffff !important;
+        color: #333 !important;
+    }
+
+    /* ESTILO ACTUALIZADO: Botones sólidos con Borde Blanco */
+    .btn-accion-solido {
+        opacity: 1 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        border: 2px solid white !important; /* <--- Borde blanco añadido */
+    }
+    
+    .table-bordered > :not(caption) > * > * { border-width: 1px; }
+</style>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Cronograma: {{ proyecto.nombre }}</h2>
+        <div>
+            <a href="{% url 'crear_tarea_cronograma' %}" class="btn btn-primary shadow">
+                <i class="bi bi-plus-lg"></i> Crear Nueva Actividad
+            </a>
+            <a href="/admin/actividades/cronograma/" target="_blank" class="btn btn-outline-secondary ms-2">
+                <i class="bi bi-gear"></i>
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <table class="table table-bordered mb-0 align-middle" style="font-size: 0.95rem;">
+                <thead class="text-center text-white" style="background-color: #4472C4;">
+                    <tr>
+                        <th style="width: 40%; text-align: left; padding-left: 15px;">ZONA / ACTIVIDAD</th>
+                        <th>INICIO PROG</th>
+                        <th>FIN PROG</th>
+                        <th>INICIO REAL</th>
+                        <th>FIN REAL</th>
+                        <th>ESTATUS</th>
+                        <th style="width: 130px;">ACCIONES</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for zona in zonas %}
+                        
+                        <tr class="fila-nivel-2">
+                            <td colspan="6" class="ps-3 align-middle">
+                                <i class="bi bi-folder2-open me-2"></i> {{ zona.nombre }}
+                            </td>
+                            <td class="text-center align-middle p-1">
+                                <a href="{% url 'crear_tarea_cronograma' %}?padre={{ zona.id }}" class="btn btn-sm btn-success btn-accion-solido" title="Agregar Actividad Aquí">
+                                    <i class="bi bi-plus-lg"></i>
+                                </a>
+                                <a href="{% url 'editar_fechas_cronograma' zona.id %}" class="btn btn-sm btn-outline-light ms-1 btn-accion-solido" style="color: white; background-color: rgba(255,255,255,0.2);" title="Editar Zona">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+
+                        {% for actividad in zona.sub_tareas.all %}
+                            <tr class="fila-nivel-3">
+                                <td class="ps-5">
+                                    • {{ actividad.nombre }}
+                                </td>
+                                
+                                <td class="text-center small">{{ actividad.fecha_inicio_prog|date:"d/m/Y"|default:"-" }}</td>
+                                <td class="text-center small">{{ actividad.fecha_fin_prog|date:"d/m/Y"|default:"-" }}</td>
+                                
+                                <td class="text-center fw-bold text-primary small">
+                                    {{ actividad.fecha_inicio_real|date:"d/m/Y"|default:"-" }}
+                                </td>
+                                <td class="text-center fw-bold text-primary small">
+                                    {{ actividad.fecha_fin_real|date:"d/m/Y"|default:"-" }}
+                                </td>
+
+                                <td class="text-center fw-bold small">
+                                    {% with st=actividad.estado_calculado %}
+                                        {% if "Atrasado" in st %}
+                                            <span class="badge bg-danger">Atrasado</span>
+                                        {% elif "Proceso" in st %}
+                                            <span class="badge bg-primary">En Proceso</span>
+                                        {% elif "Tiempo" in st or "Terminado" in st %}
+                                            <span class="badge bg-success">OK</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">-</span>
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
+
+                                <td class="text-center p-1">
+                                    <a href="{% url 'editar_fechas_cronograma' actividad.id %}" class="btn btn-sm btn-warning text-dark btn-accion-solido fw-bold" title="Actualizar">
+                                        <i class="bi bi-pencil-square"></i> Editar
+                                    </a>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr class="bg-light">
+                                <td colspan="7" class="text-center text-muted small py-2 fst-italic">
+                                    Esta zona no tiene actividades registradas. 
+                                    <a href="{% url 'crear_tarea_cronograma' %}?padre={{ zona.id }}">Agrega una aquí</a>.
+                                </td>
+                            </tr>
+                        {% endfor %}
+
+                    {% empty %}
+                        <tr><td colspan="7" class="text-center p-5">No hay zonas (Nivel 2) registradas. Verifica que hayas creado la estructura base en el Admin.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

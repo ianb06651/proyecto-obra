@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva Actividad{% endblock %}
+
+{% block content %}
+<div class="card w-50 mx-auto mt-4 shadow">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Crear Nueva Actividad</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">Agrega una nueva tarea al cronograma de <strong>{{ proyecto.nombre }}</strong>.</p>
+        
+        <form method="post">
+            {% csrf_token %}
+            
+            <div class="mb-3">
+                <label class="form-label fw-bold">Nombre de la Actividad / Zona</label>
+                {{ form.nombre }}
+                {% if form.nombre.errors %}<div class="text-danger small">{{ form.nombre.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Categoría Padre (Opcional)</label>
+                {{ form.padre }}
+                <div class="form-text small">
+                    Selecciona una categoría para agrupar esta actividad. <br>
+                    <strong>Déjalo vacío</strong> si esta ES una categoría nueva (Nivel 1).
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label small">Inicio Programado</label>
+                    {{ form.fecha_inicio_prog }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label small">Fin Programado</label>
+                    {{ form.fecha_fin_prog }}
+                </div>
+            </div>
+
+            <hr>
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{% url 'vista_cronograma' %}" class="btn btn-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-success">Guardar Actividad</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Convierte el select normal en un buscador inteligente
+        new TomSelect('select[name="padre"]', {
+            create: false,
+            sortField: {field: "text", direction: "asc"},
+            placeholder: "Escribe para buscar categoría...",
+            allowEmptyOption: true
+        });
+    });
+</script>
+{% endblock %}

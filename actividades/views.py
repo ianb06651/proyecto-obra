@@ -20,7 +20,7 @@ from .serializers import ElementoBIM_GUID_Serializer
 from .forms import (
     ReporteMaquinariaForm, ReportePersonalForm, ActividadForm,
     ConsultaClimaForm, AvanceDiarioForm, AvancePorZonaFormSet,
-    MetaPorZonaFormSet, SeleccionarElementoForm
+    MetaPorZonaFormSet, SeleccionarElementoForm, CronogramaHibridoForm, CronogramaForm
 )
 from .services import obtener_y_guardar_clima
 from .models import (
@@ -28,7 +28,7 @@ from .models import (
     Empresa, Cargo, AreaDeTrabajo, ReporteDiarioMaquinaria, Proyecto,
     AvancePorZona, MetaPorZona, ElementoConstructivo, 
     PasoProcesoTipoElemento, AvanceProcesoElemento, TipoElemento,
-    ElementoBIM_GUID
+    ElementoBIM_GUID, Cronograma
 )
 
 def es_staff(user):
@@ -59,14 +59,12 @@ def historial_avance_view(request, proyecto_id):
 
     total_real_ev_acumulado = sum(avance.cantidad_total for avance in avances_totales_acumulados)
     
-    # --- MODIFICACIÓN: CÁLCULO DE SPI CON TOPE DE 2.0 ---
-    # Esto evita valores astronómicos al inicio de la obra
+
     if total_programado_pv_acumulado and total_programado_pv_acumulado > 0:
         spi_calculado = total_real_ev_acumulado / total_programado_pv_acumulado
-        spi_acumulado = min(spi_calculado, 2.0) # Aquí está el límite
+        spi_acumulado = min(spi_calculado, 2.0) 
     else:
         spi_acumulado = 0
-    # ----------------------------------------------------
 
     semana_seleccionada_id = request.GET.get('semana_filtro')
     actividad_seleccionada_id = request.GET.get('actividad_filtro')
@@ -104,7 +102,7 @@ def historial_avance_view(request, proyecto_id):
         'actividad_seleccionada_id': actividad_seleccionada_id,
         'total_programado_pv': total_programado_pv_acumulado,
         'total_real_ev': total_real_ev_acumulado,
-        'rendimiento_spi': spi_acumulado, # Pasamos el valor ya limitado
+        'rendimiento_spi': spi_acumulado, 
         'fecha_corte': fecha_corte_total,
         'avances_reales': avances_para_tabla.order_by('-fecha_reporte')
     }
@@ -750,4 +748,85 @@ def api_generar_rango(request):
         'encontrados': len(resultados_json),
         'buscados': len(candidatos),
         'resultados': resultados_json
+    })
+
+
+def vista_cronograma(request, proyecto_id):
+    proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
+    
+    # Traemos solo los padres (Raíces) y pre-cargamos los hijos para eficiencia
+    # Asumimos una jerarquía de 2 niveles como en tu imagen (Categoria -> Actividad)
+    nodos_raiz = Cronograma.objects.filter(
+        proyecto=proyecto, 
+        padre__isnull=True
+    ).prefetch_related('sub_tareas')
+
+    context = {
+        'proyecto': proyecto,
+        'nodos_raiz': nodos_raiz
+    }
+    return render(request, 'actividades/cronograma_list.html', context)
+
+def vista_cronograma(request):
+    # 1. Obtener proyecto automático
+    proyecto = Proyecto.objects.first()
+    if not proyecto:
+        messages.error(request, "No hay proyectos registrados.")
+        return redirect('pagina_principal')
+
+    # 2. CAMBIO CLAVE: Traer directamente el NIVEL 2 (Zonas)
+    # Filtramos actividades que TIENEN padre (son hijos) Y cuyo padre NO tiene padre (es raíz).
+    # Esto nos da exactamente el segundo nivel de la jerarquía.
+    zonas_nivel_2 = Cronograma.objects.filter(
+        proyecto=proyecto, 
+        padre__isnull=False,        # Tiene padre
+        padre__padre__isnull=True   # Su padre es raíz (Nivel 1)
+    ).select_related('padre').prefetch_related(
+        'sub_tareas' # Traemos las actividades finales (Nivel 3)
+    ).order_by('padre__id', 'id') # Ordenamos por el ID del padre para mantener agrupación lógica
+
+    context = {
+        'proyecto': proyecto,
+        'zonas': zonas_nivel_2 # Pasamos las zonas directo al template
+    }
+    return render(request, 'actividades/cronograma_list.html', context)
+
+
+def crear_tarea_cronograma(request):
+    proyecto = Proyecto.objects.first()
+    if not proyecto:
+        messages.error(request, "No hay proyecto activo.")
+        return redirect('pagina_principal')
+    
+    padre_id = request.GET.get('padre')
+    
+    form = CronogramaForm(request.POST or None, initial={'padre': padre_id}, proyecto=proyecto)
+    
+    if request.method == 'POST':
+        if form.is_valid():
+            tarea = form.save(commit=False)
+            tarea.proyecto = proyecto
+            tarea.save()
+            messages.success(request, f"Actividad '{tarea.nombre}' creada exitosamente.")
+            return redirect('vista_cronograma')
+            
+    return render(request, 'actividades/cronograma_crear.html', {
+        'form': form, 
+        'proyecto': proyecto
+    })
+
+
+def editar_fechas_cronograma(request, pk):
+    tarea = get_object_or_404(Cronograma, pk=pk)
+    form = CronogramaHibridoForm(request.POST or None, instance=tarea)
+    
+    if request.method == 'POST':
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Actividad '{tarea.nombre}' actualizada.")
+            return redirect('vista_cronograma')
+
+    return render(request, 'actividades/cronograma_form.html', {
+        'form': form, 
+        'tarea': tarea
     })

@@ -451,3 +451,62 @@ class AvanceProcesoElemento(models.Model):
              raise ValidationError(
                  _("La fecha de finalización no puede ser una fecha futura."), code='fecha_futura'
              )
+             
+class Cronograma(models.Model):
+    """
+    Modelo independiente para el control de tiempos tipo Project/Excel.
+    No se mezcla con el WBS de costos/estimaciones.
+    """
+    proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='cronogramas')
+    padre = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='sub_tareas')
+    nombre = models.CharField("Actividad / Zona", max_length=255)
+    
+    # Fechas Planificadas (Obligatorias para el plan)
+    fecha_inicio_prog = models.DateField("Inicio Programado", null=True, blank=True)
+    fecha_fin_prog = models.DateField("Fin Programado", null=True, blank=True)
+    
+    # Fechas Reales (Manuales mediante formulario)
+    fecha_inicio_real = models.DateField("Inicio Real", null=True, blank=True)
+    fecha_fin_real = models.DateField("Fin Real", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Actividad de Cronograma"
+        verbose_name_plural = "Cronograma (Project)"
+        ordering = ['fecha_inicio_prog', 'id'] # Ordenar por fecha ayuda a la vista
+
+    def __str__(self):
+        return self.nombre
+
+    @property
+    def estado_calculado(self):
+        """
+        Replica la lógica de tu Excel: 'Atrasado', 'Proceso', 'En tiempo'.
+        Power BI puede replicar esto con DAX, pero aquí sirve para la App.
+        """
+        hoy = date.today()
+        
+        # 1. Si ya terminó
+        if self.fecha_fin_real:
+            if self.fecha_fin_prog and self.fecha_fin_real > self.fecha_fin_prog:
+                return "Terminado con Atraso"
+            return "Terminado en Tiempo"
+
+        # 2. Si ya inició pero no ha terminado (En Proceso)
+        if self.fecha_inicio_real and not self.fecha_fin_real:
+            # Checar si ya venció la fecha fin programada
+            if self.fecha_fin_prog and hoy > self.fecha_fin_prog:
+                return "Atrasado" # Está en proceso pero ya debió terminar
+            return "Proceso" # En proceso y dentro de tiempo
+
+        # 3. No ha iniciado
+        if not self.fecha_inicio_real:
+            if self.fecha_inicio_prog and hoy > self.fecha_inicio_prog:
+                return "Atrasado (No Inició)"
+            # Si hoy es antes del inicio, es "Por Iniciar" o "Tiempo"
+            return "Por Iniciar"
+        
+        return "N/A"
+
+    @property
+    def es_padre(self):
+        return self.sub_tareas.exists()

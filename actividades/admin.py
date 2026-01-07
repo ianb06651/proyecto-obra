@@ -8,7 +8,7 @@ from .models import (
     ReporteDiarioMaquinaria, ReporteClima, Proyecto,
     MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
     ElementoConstructivo, AvanceProcesoElemento,
-    ElementoBIM_GUID # <--- 1. IMPORTAR EL NUEVO MODELO
+    ElementoBIM_GUID, Cronograma
 )
 
 # --- Registros de Catálogos ---
@@ -151,3 +151,23 @@ class ElementoBIM_GUID_Admin(admin.ModelAdmin):
     list_display = ('identificador_bim', 'elemento_constructivo')
     search_fields = ('identificador_bim', 'elemento_constructivo__identificador_unico')
     autocomplete_fields = ['elemento_constructivo']
+    
+@admin.register(Cronograma)
+class CronogramaAdmin(admin.ModelAdmin):
+    # Mostramos columnas útiles para identificar la jerarquía
+    list_display = ('nombre', 'padre', 'proyecto', 'fecha_inicio_prog', 'fecha_fin_prog')
+    
+    # Filtros laterales para navegar rápido por la estructura
+    list_filter = ('proyecto', 'padre')
+    
+    # Buscador para encontrar tareas rápido
+    search_fields = ('nombre',)
+    
+    # Ordenar por jerarquía y fecha
+    ordering = ('padre', 'fecha_inicio_prog')
+    
+    # Esto permite seleccionar el padre usando un buscador en lugar de un dropdown gigante
+    autocomplete_fields = ['padre'] 
+    
+    # Opcional: Para edición masiva rápida de fechas desde la lista
+    list_editable = ('fecha_inicio_prog', 'fecha_fin_prog')    

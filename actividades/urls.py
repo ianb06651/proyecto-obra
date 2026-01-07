@@ -43,4 +43,8 @@ urlpatterns = [
          name='api_obtener_pasos'),
     
     path('api/generar-rango/', views.api_generar_rango, name='api_generar_rango'),
+    
+   path('cronograma/', views.vista_cronograma, name='vista_cronograma'),
+    path('cronograma/nuevo/', views.crear_tarea_cronograma, name='crear_tarea_cronograma'), # <--- URL ACTUALIZADA
+    path('cronograma/editar/<int:pk>/', views.editar_fechas_cronograma, name='editar_fechas_cronograma'),
 ]

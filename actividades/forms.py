@@ -3,12 +3,13 @@
 from django import forms
 from django.forms import inlineformset_factory
 from datetime import date
+from django.db.models import Q
 from .models import (
     ReporteDiarioMaquinaria, ReportePersonal, Actividad,
     PartidaActividad, AvanceDiario, ReporteClima,
     MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
     ElementoConstructivo, AvanceProcesoElemento,
-    AreaDeTrabajo
+    AreaDeTrabajo, Cronograma
 )
 
 # --- Formularios sin cambios ---
@@ -179,9 +180,6 @@ class AvanceDiarioForm(forms.ModelForm):
         # la validación, permitiendo que la vista maneje la unicidad.
         pass
              
-             
-# --- FORMULARIOS PARA REGISTRO DE AVANCE BIM ---
-# (Sin cambios)
 class SeleccionarElementoForm(forms.Form):
     elemento = forms.ModelChoiceField(
         queryset=ElementoConstructivo.objects.all(),
@@ -200,3 +198,47 @@ class AvanceProcesoElementoForm(forms.ModelForm):
         model = AvanceProcesoElemento
         fields = ['paso_proceso', 'fecha_finalizacion']
         widgets = {'paso_proceso': forms.HiddenInput()}
+        
+class CronogramaHibridoForm(forms.ModelForm):
+    class Meta:
+        model = Cronograma
+        fields = [
+            'nombre', 
+            'fecha_inicio_prog', 'fecha_fin_prog', 
+            'fecha_inicio_real', 'fecha_fin_real'
+        ]
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control fw-bold'}),
+            'fecha_inicio_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_fin_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_inicio_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control border-primary'}),
+            'fecha_fin_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control border-primary'}),
+        }
+
+class CronogramaForm(forms.ModelForm):
+    class Meta:
+        model = Cronograma
+        fields = ['nombre', 'padre', 'fecha_inicio_prog', 'fecha_fin_prog']
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la Actividad'}),
+            'padre': forms.Select(attrs={'class': 'form-select'}),
+            'fecha_inicio_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_fin_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        proyecto = kwargs.pop('proyecto', None)
+        super().__init__(*args, **kwargs)
+
+        if proyecto:
+            # CAMBIO IMPORTANTE:
+            # Permitimos que el padre sea Nivel 1 (para crear Zonas) O Nivel 2 (para crear Tareas)
+            self.fields['padre'].queryset = Cronograma.objects.filter(
+                proyecto=proyecto
+            ).filter(
+                Q(padre__isnull=True) | Q(padre__padre__isnull=True)
+            ).order_by('padre__nombre', 'nombre')
+            
+            # Etiqueta personalizada para el dropdown
+            self.fields['padre'].label_from_instance = lambda obj: f"{'📂 ' + obj.nombre if obj.padre is None else '↳ ' + obj.nombre}"
+            self.fields['padre'].empty_label = "--- Sin Padre (Crear Nivel 1) ---"

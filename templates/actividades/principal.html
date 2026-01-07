@@ -15,7 +15,7 @@
 
     <div class="container acciones-container">
         <div class="row">
-            {# --- Tarjeta 1: Acciones Generales (con el nuevo botón) --- #}
+            {# --- Tarjeta 1: Acciones Generales --- #}
             <div class="col-md-4">
                 <div class="seccion-accion">
                     <h2>Acciones Generales</h2>
@@ -29,26 +29,37 @@
                 </div>
             </div>
 
-            {# --- Tarjeta 2: Historial (restaurada a su estado original) --- #}
+            {# --- Tarjeta 2: Gestión por Proyecto (MODIFICADA) --- #}
             <div class="col-md-4">
                 <div class="seccion-accion">
-                    <h2>Historial por Proyecto</h2>
+                    <h2>Gestión por Proyecto</h2>
                     <p>
-                        Selecciona un proyecto para ver su historial de avance detallado.
+                        Accede al historial de costos/cantidades o al cronograma de tiempos.
                     </p>
                     <div class="list-group">
                         {% for proyecto in proyectos %}
-                            <a href="{% url 'historial_avance' proyecto.pk %}" class="list-group-item list-group-item-action">
-                                {{ proyecto.nombre }}
-                            </a>
+                            {# Contenedor flexible para alinear nombre a la izq y botón a la der #}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                
+                                {# Enlace al Historial Original (Nombre del Proyecto) #}
+                                <a href="{% url 'historial_avance' proyecto.pk %}" class="text-decoration-none text-dark fw-bold">
+                                    {{ proyecto.nombre }}
+                                </a>
+
+                                {# Nuevo Botón para ir a la Tabla del Cronograma #}
+                                <a href="{% url 'vista_cronograma' %}" class="btn btn-sm btn-success">
+                                    Ver Cronograma
+                                </a>
+
+                            </div>
                         {% empty %}
-                            <p class="text-muted">No hay proyectos registrados.</p>
+                            <p class="text-muted p-3">No hay proyectos registrados.</p>
                         {% endfor %}
                     </div>
                 </div>
             </div>
 
-            {# --- Tarjeta 3: Consulta Climatológica (sin cambios) --- #}
+            {# --- Tarjeta 3: Consulta Climatológica --- #}
             <div class="col-md-4">
                 <div class="seccion-accion">
                     <h2>Consulta Climatológica</h2>
