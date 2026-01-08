@@ -830,3 +830,62 @@ def editar_fechas_cronograma(request, pk):
         'form': form, 
         'tarea': tarea
     })
+
+def vista_cronograma_movil(request):
+    """
+    Vista optimizada para móviles que permite actualizar fechas
+    mediante filtros en cascada (Nivel 1 -> Nivel 2 -> Actividad).
+    """
+    proyecto = Proyecto.objects.first() # Asumimos un proyecto activo
+    
+    # Procesar Guardado del Formulario
+    if request.method == 'POST':
+        tarea_id = request.POST.get('tarea_id')
+        inicio_real = request.POST.get('fecha_inicio_real')
+        fin_real = request.POST.get('fecha_fin_real')
+        
+        if tarea_id:
+            tarea = get_object_or_404(Cronograma, pk=tarea_id)
+            
+            # Convertir strings vacíos a None para limpiar la fecha si se borra
+            tarea.fecha_inicio_real = inicio_real if inicio_real else None
+            tarea.fecha_fin_real = fin_real if fin_real else None
+            
+            tarea.save()
+            messages.success(request, f"Actualizado: {tarea.nombre}")
+            return redirect('cronograma_movil')
+        else:
+            messages.error(request, "Error: No se seleccionó ninguna tarea.")
+
+    # Carga inicial: Solo Nivel 1 (Categorías Raíz)
+    # Filtramos las que NO tienen padre
+    categorias_nivel_1 = Cronograma.objects.filter(
+        proyecto=proyecto,
+        padre__isnull=True
+    ).order_by('id')
+
+    context = {
+        'proyecto': proyecto,
+        'categorias_nivel_1': categorias_nivel_1
+    }
+    return render(request, 'actividades/cronograma_actualizar_movil.html', context)
+
+
+@require_GET
+def api_hijos_cronograma(request, padre_id):
+    """Retorna los hijos de un nodo Cronograma en JSON para los selectores."""
+    hijos = Cronograma.objects.filter(padre_id=padre_id).values('id', 'nombre').order_by('id')
+    return JsonResponse(list(hijos), safe=False)
+
+
+@require_GET
+def api_detalle_tarea(request, tarea_id):
+    """Retorna las fechas actuales de una tarea para pre-llenar el formulario."""
+    tarea = get_object_or_404(Cronograma, pk=tarea_id)
+    data = {
+        'id': tarea.id,
+        'nombre': tarea.nombre,
+        'fecha_inicio_real': tarea.fecha_inicio_real,
+        'fecha_fin_real': tarea.fecha_fin_real,
+    }
+    return JsonResponse(data)

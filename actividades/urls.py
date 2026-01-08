@@ -47,4 +47,10 @@ urlpatterns = [
    path('cronograma/', views.vista_cronograma, name='vista_cronograma'),
     path('cronograma/nuevo/', views.crear_tarea_cronograma, name='crear_tarea_cronograma'), # <--- URL ACTUALIZADA
     path('cronograma/editar/<int:pk>/', views.editar_fechas_cronograma, name='editar_fechas_cronograma'),
+    
+    path('cronograma/movil/', views.vista_cronograma_movil, name='cronograma_movil'),
+    
+    # APIs internas para los selectores dinámicos
+    path('api/cronograma/hijos/<int:padre_id>/', views.api_hijos_cronograma, name='api_hijos_cronograma'),
+    path('api/cronograma/detalle/<int:tarea_id>/', views.api_detalle_tarea, name='api_detalle_tarea'),
 ]
