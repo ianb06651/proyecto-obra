@@ -1,94 +1,76 @@
 {% extends "base.html" %}
 
-{% block title %}Cronograma Maestro{% endblock %}
+{% block title %}Cronograma por Zonas{% endblock %}
 
 {% block content %}
-<style>
-    /* Nivel 2 (ZONA): Azul Oscuro */
-    tr.fila-nivel-2 > td {
-        background-color: #2F5597 !important; 
-        color: white !important;
-        font-weight: bold;
-        text-transform: uppercase;
-    }
-
-    /* Nivel 3 (ACTIVIDAD): Blanco */
-    tr.fila-nivel-3 > td {
-        background-color: #ffffff !important;
-        color: #333 !important;
-    }
-
-    /* ESTILO ACTUALIZADO: Botones sólidos con Borde Blanco */
-    .btn-accion-solido {
-        opacity: 1 !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        border: 2px solid white !important; /* <--- Borde blanco añadido */
-    }
-    
-    .table-bordered > :not(caption) > * > * { border-width: 1px; }
-</style>
-
 <div class="container-fluid mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Cronograma: {{ proyecto.nombre }}</h2>
         <div>
             <a href="{% url 'crear_tarea_cronograma' %}" class="btn btn-primary shadow">
                 <i class="bi bi-plus-lg"></i> Crear Nueva Actividad
             </a>
-            <a href="/admin/actividades/cronograma/" target="_blank" class="btn btn-outline-secondary ms-2">
-                <i class="bi bi-gear"></i>
-            </a>
         </div>
     </div>
 
+    {# --- TARJETA DE FILTRO --- #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-body bg-light">
+            <form method="get" class="row align-items-end">
+                <div class="col-md-6">
+                    <label for="zona_id" class="form-label fw-bold text-primary">
+                        <i class="bi bi-geo-alt-fill"></i> Selecciona una Zona para ver su Cronograma:
+                    </label>
+                    <select name="zona_id" id="zona_id" class="form-select form-select-lg" onchange="this.form.submit()">
+                        <option value="">-- Seleccionar Zona --</option>
+                        {% for z in zonas_list %}
+                            <option value="{{ z.id }}" {% if zona_seleccionada.id == z.id %}selected{% endif %}>
+                                {{ z.nombre }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# --- TABLA DE RESULTADOS --- #}
     <div class="card shadow-sm border-0">
         <div class="card-body p-0">
-            <table class="table table-bordered mb-0 align-middle" style="font-size: 0.95rem;">
-                <thead class="text-center text-white" style="background-color: #4472C4;">
-                    <tr>
-                        <th style="width: 40%; text-align: left; padding-left: 15px;">ZONA / ACTIVIDAD</th>
-                        <th>INICIO PROG</th>
-                        <th>FIN PROG</th>
-                        <th>INICIO REAL</th>
-                        <th>FIN REAL</th>
-                        <th>ESTATUS</th>
-                        <th style="width: 130px;">ACCIONES</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for zona in zonas %}
-                        
-                        <tr class="fila-nivel-2">
-                            <td colspan="6" class="ps-3 align-middle">
-                                <i class="bi bi-folder2-open me-2"></i> {{ zona.nombre }}
-                            </td>
-                            <td class="text-center align-middle p-1">
-                                <a href="{% url 'crear_tarea_cronograma' %}?padre={{ zona.id }}" class="btn btn-sm btn-success btn-accion-solido" title="Agregar Actividad Aquí">
-                                    <i class="bi bi-plus-lg"></i>
-                                </a>
-                                <a href="{% url 'editar_fechas_cronograma' zona.id %}" class="btn btn-sm btn-outline-light ms-1 btn-accion-solido" style="color: white; background-color: rgba(255,255,255,0.2);" title="Editar Zona">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                            </td>
+            {% if zona_seleccionada %}
+                <div class="p-3 bg-primary text-white">
+                    <h5 class="mb-0">Actividades en: <strong>{{ zona_seleccionada.nombre }}</strong></h5>
+                </div>
+                
+                <table class="table table-striped table-hover mb-0 align-middle">
+                    <thead class="table-dark text-center">
+                        <tr>
+                            <th style="text-align: left;">ACTIVIDAD</th>
+                            <th>INICIO PROG</th>
+                            <th>FIN PROG</th>
+                            <th>INICIO REAL</th>
+                            <th>FIN REAL</th>
+                            <th>ESTATUS</th>
+                            <th>ACCIONES</th>
                         </tr>
-
-                        {% for actividad in zona.sub_tareas.all %}
-                            <tr class="fila-nivel-3">
-                                <td class="ps-5">
-                                    • {{ actividad.nombre }}
+                    </thead>
+                    <tbody>
+                        {% for actividad in tareas %}
+                            <tr>
+                                <td class="fw-bold text-dark">
+                                    {{ actividad.nombre }}
+                                    {% if actividad.padre %}
+                                        <div class="small text-muted fw-normal">↳ {{ actividad.padre.nombre }}</div>
+                                    {% endif %}
                                 </td>
                                 
-                                <td class="text-center small">{{ actividad.fecha_inicio_prog|date:"d/m/Y"|default:"-" }}</td>
-                                <td class="text-center small">{{ actividad.fecha_fin_prog|date:"d/m/Y"|default:"-" }}</td>
+                                <td class="text-center">{{ actividad.fecha_inicio_prog|date:"d/m/Y"|default:"-" }}</td>
+                                <td class="text-center">{{ actividad.fecha_fin_prog|date:"d/m/Y"|default:"-" }}</td>
                                 
-                                <td class="text-center fw-bold text-primary small">
-                                    {{ actividad.fecha_inicio_real|date:"d/m/Y"|default:"-" }}
-                                </td>
-                                <td class="text-center fw-bold text-primary small">
-                                    {{ actividad.fecha_fin_real|date:"d/m/Y"|default:"-" }}
-                                </td>
+                                <td class="text-center text-primary fw-bold">{{ actividad.fecha_inicio_real|date:"d/m/Y"|default:"-" }}</td>
+                                <td class="text-center text-primary fw-bold">{{ actividad.fecha_fin_real|date:"d/m/Y"|default:"-" }}</td>
 
-                                <td class="text-center fw-bold small">
+                                <td class="text-center">
                                     {% with st=actividad.estado_calculado %}
                                         {% if "Atrasado" in st %}
                                             <span class="badge bg-danger">Atrasado</span>
@@ -97,31 +79,35 @@
                                         {% elif "Tiempo" in st or "Terminado" in st %}
                                             <span class="badge bg-success">OK</span>
                                         {% else %}
-                                            <span class="badge bg-secondary">-</span>
+                                            <span class="badge bg-secondary text-dark bg-opacity-25">{{ st }}</span>
                                         {% endif %}
                                     {% endwith %}
                                 </td>
 
-                                <td class="text-center p-1">
-                                    <a href="{% url 'editar_fechas_cronograma' actividad.id %}" class="btn btn-sm btn-warning text-dark btn-accion-solido fw-bold" title="Actualizar">
-                                        <i class="bi bi-pencil-square"></i> Editar
+                                <td class="text-center">
+                                    <a href="{% url 'editar_fechas_cronograma' actividad.id %}" class="btn btn-sm btn-outline-primary" title="Editar Fechas">
+                                        <i class="bi bi-pencil-square"></i>
                                     </a>
                                 </td>
                             </tr>
                         {% empty %}
-                            <tr class="bg-light">
-                                <td colspan="7" class="text-center text-muted small py-2 fst-italic">
-                                    Esta zona no tiene actividades registradas. 
-                                    <a href="{% url 'crear_tarea_cronograma' %}?padre={{ zona.id }}">Agrega una aquí</a>.
+                            <tr>
+                                <td colspan="7" class="text-center py-5 text-muted">
+                                    <i class="bi bi-info-circle fs-1 d-block mb-3"></i>
+                                    No hay actividades asignadas a esta zona.
                                 </td>
                             </tr>
                         {% endfor %}
-
-                    {% empty %}
-                        <tr><td colspan="7" class="text-center p-5">No hay zonas (Nivel 2) registradas. Verifica que hayas creado la estructura base en el Admin.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            {% else %}
+                {# MENSAJE VACÍO #}
+                <div class="text-center py-5">
+                    <i class="bi bi-arrow-up-circle fs-1 text-muted mb-3 d-block"></i>
+                    <h4 class="text-muted">Por favor, selecciona una zona arriba 👆</h4>
+                    <p class="text-muted small">El cronograma se cargará según la zona que elijas.</p>
+                </div>
+            {% endif %}
         </div>
     </div>
 </div>

@@ -4,12 +4,11 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from datetime import date, timedelta
-from django.db.models import Sum, Count # Importar Count
+from django.db.models import Sum, Count, Max
 from functools import cached_property
-from django.db.models import Max
+from django.contrib.auth.models import User  # <--- NUEVO IMPORT
 
 # --- CATÁLOGOS ---
-# ... (El resto de tus modelos: Empresa, Cargo, AreaDeTrabajo, etc. no cambian) ...
 class Empresa(models.Model):
     nombre = models.CharField(max_length=255, unique=True)
     def __str__(self): return self.nombre
@@ -350,10 +349,6 @@ class ElementoConstructivo(models.Model):
         db_index=True,
         help_text=_("El identificador legible por humanos (ej. ZA-B5) que se usará para buscar.")
     )
-    
-    # --- CAMPO ELIMINADO ---
-    # El campo 'identificador_bim' que estaba aquí ha sido removido.
-    # --- FIN CAMPO ELIMINADO ---
 
     tipo_elemento = models.ForeignKey(TipoElemento, on_delete=models.PROTECT, related_name='elementos')
     descripcion = models.CharField(_("Descripción Adicional"), max_length=255, blank=True, null=True)
@@ -391,8 +386,6 @@ class ElementoConstructivo(models.Model):
             return "Completado"
         return "En Proceso"
 
-
-# --- NUEVO MODELO ---
 class ElementoBIM_GUID(models.Model):
     """
     Almacena los GUIDs individuales del modelo BIM (Revit/Navisworks)
@@ -421,7 +414,6 @@ class ElementoBIM_GUID(models.Model):
     def __str__(self):
         # Texto de ayuda para el admin
         return f"{self.identificador_bim} -> {self.elemento_constructivo.identificador_unico}"
-# --- FIN NUEVO MODELO ---
 
 
 class AvanceProcesoElemento(models.Model):
@@ -461,6 +453,15 @@ class Cronograma(models.Model):
     padre = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='sub_tareas')
     nombre = models.CharField("Actividad / Zona", max_length=255)
     
+    # --- NUEVO CAMPO: Relación Many-to-Many con Zonas (AreaDeTrabajo) ---
+    zonas = models.ManyToManyField(
+        AreaDeTrabajo, 
+        blank=True, 
+        related_name='tareas_cronograma',
+        verbose_name="Zonas Aplicables"
+    )
+    # --- FIN NUEVO CAMPO ---
+    
     # Fechas Planificadas (Obligatorias para el plan)
     fecha_inicio_prog = models.DateField("Inicio Programado", null=True, blank=True)
     fecha_fin_prog = models.DateField("Fin Programado", null=True, blank=True)
@@ -472,7 +473,7 @@ class Cronograma(models.Model):
     class Meta:
         verbose_name = "Actividad de Cronograma"
         verbose_name_plural = "Cronograma (Project)"
-        ordering = ['fecha_inicio_prog', 'id'] # Ordenar por fecha ayuda a la vista
+        ordering = ['fecha_inicio_prog', 'id'] 
 
     def __str__(self):
         return self.nombre
@@ -510,3 +511,43 @@ class Cronograma(models.Model):
     @property
     def es_padre(self):
         return self.sub_tareas.exists()
+
+# --- NUEVO MODELO: OBSERVACIONES ---
+class Observacion(models.Model):
+    """
+    Registra observaciones diarias en una zona específica, con soporte para
+    marcar cumplimiento (check) por un usuario y evidencia fotográfica.
+    """
+    fecha = models.DateField(default=date.today, verbose_name="Fecha de Observación")
+    zona = models.ForeignKey(AreaDeTrabajo, on_delete=models.PROTECT, verbose_name="Zona")
+    nombre = models.CharField(max_length=255, verbose_name="Nombre / Título de la Observación")
+    comentario = models.TextField(verbose_name="Descripción / Comentario")
+    
+    # --- NUEVO CAMPO DE FOTO ---
+    imagen = models.ImageField(
+        upload_to='evidencia_observaciones/', 
+        null=True, 
+        blank=True, 
+        verbose_name="Evidencia Fotográfica"
+    )
+    # ---------------------------
+    
+    # Campos de Cumplimiento
+    resuelto = models.BooleanField(default=False, verbose_name="¿Resuelto?")
+    resuelto_por = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        verbose_name="Resuelto por"
+    )
+    fecha_resolucion = models.DateField(null=True, blank=True, verbose_name="Fecha de Resolución")
+
+    class Meta:
+        verbose_name = "Observación de Campo"
+        verbose_name_plural = "Observaciones de Campo"
+        unique_together = ('fecha', 'zona', 'nombre')
+        ordering = ['-fecha', 'zona']
+
+    def __str__(self):
+        return f"{self.fecha} - {self.zona}: {self.nombre}"

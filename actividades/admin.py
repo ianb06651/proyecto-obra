@@ -8,11 +8,10 @@ from .models import (
     ReporteDiarioMaquinaria, ReporteClima, Proyecto,
     MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
     ElementoConstructivo, AvanceProcesoElemento,
-    ElementoBIM_GUID, Cronograma
+    ElementoBIM_GUID, Cronograma, Observacion
 )
 
 # --- Registros de Catálogos ---
-# ... (El resto de tus registros: Empresa, Cargo, Semana, etc. no cambian) ...
 admin.site.register(Empresa)
 admin.site.register(Cargo)
 admin.site.register(Semana)
@@ -113,25 +112,19 @@ class PasoProcesoTipoElementoAdmin(admin.ModelAdmin):
 
 # --- 2. NUEVO INLINE ---
 class ElementoBIM_GUID_Inline(admin.TabularInline):
-    """Permite añadir/editar GUIDs directamente desde la vista de ElementoConstructivo."""
     model = ElementoBIM_GUID
-    extra = 1 # Empieza con un campo vacío para añadir un nuevo GUID
+    extra = 1 
     fields = ('identificador_bim',)
-    # Opcional: añade búsqueda si la lista de GUIDs se vuelve muy larga
-    # search_fields = ('identificador_bim',) 
     verbose_name = "GUID de BIM"
     verbose_name_plural = "GUIDs de BIM (Navisworks/Revit)"
 
 # --- 3. MODIFICAR ElementoConstructivoAdmin ---
 @admin.register(ElementoConstructivo)
 class ElementoConstructivoAdmin(admin.ModelAdmin):
-    # Quitado 'identificador_bim' de list_display
     list_display = ('identificador_unico', 'tipo_elemento', 'descripcion')
     list_filter = ('tipo_elemento',)
-    # Quitado 'identificador_bim' de search_fields
     search_fields = ('identificador_unico', 'descripcion') 
     autocomplete_fields = ['tipo_elemento']
-    # Añadido el nuevo inline
     inlines = [ElementoBIM_GUID_Inline]
 
 
@@ -139,13 +132,10 @@ class ElementoConstructivoAdmin(admin.ModelAdmin):
 class AvanceProcesoElementoAdmin(admin.ModelAdmin):
     list_display = ('elemento', 'paso_proceso', 'fecha_finalizacion')
     list_filter = ('paso_proceso__tipo_elemento', 'fecha_finalizacion')
-    # --- 4. MODIFICAR search_fields ---
-    # Actualizado para buscar a través de la nueva relación 'guids_bim'
     search_fields = ('elemento__identificador_unico', 'elemento__guids_bim__identificador_bim', 'paso_proceso__proceso__nombre') 
     autocomplete_fields = ['elemento', 'paso_proceso']
     date_hierarchy = 'fecha_finalizacion'
 
-# --- 5. Opcional: Registrar el modelo GUID por sí mismo ---
 @admin.register(ElementoBIM_GUID)
 class ElementoBIM_GUID_Admin(admin.ModelAdmin):
     list_display = ('identificador_bim', 'elemento_constructivo')
@@ -158,7 +148,7 @@ class CronogramaAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'padre', 'proyecto', 'fecha_inicio_prog', 'fecha_fin_prog')
     
     # Filtros laterales para navegar rápido por la estructura
-    list_filter = ('proyecto', 'padre')
+    list_filter = ('proyecto', 'padre', 'zonas') # <--- Añadido filtro por zonas
     
     # Buscador para encontrar tareas rápido
     search_fields = ('nombre',)
@@ -169,5 +159,15 @@ class CronogramaAdmin(admin.ModelAdmin):
     # Esto permite seleccionar el padre usando un buscador en lugar de un dropdown gigante
     autocomplete_fields = ['padre'] 
     
+    # Selector horizontal para las zonas (Mucho más cómodo)
+    filter_horizontal = ('zonas',) 
+    
     # Opcional: Para edición masiva rápida de fechas desde la lista
     list_editable = ('fecha_inicio_prog', 'fecha_fin_prog')    
+
+@admin.register(Observacion)
+class ObservacionAdmin(admin.ModelAdmin):
+    list_display = ('fecha', 'zona', 'nombre', 'resuelto', 'fecha_resolucion')
+    list_filter = ('zona', 'resuelto', 'fecha')
+    search_fields = ('nombre', 'comentario')
+    date_hierarchy = 'fecha'

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Observaciones de Campo{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Observaciones de Campo</h2>
+        <a href="{% url 'crear_observacion' %}" class="btn btn-danger shadow">
+            <i class="bi bi-exclamation-triangle-fill"></i> Nueva Observación
+        </a>
+    </div>
+
+    {# --- FILTROS --- #}
+    <div class="card shadow-sm mb-4 bg-light">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold small">Filtrar por Zona</label>
+                    <select name="zona_filtro" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- Todas las Zonas --</option>
+                        {% for z in zonas %}
+                            <option value="{{ z.id }}" {% if zona_seleccionada_id == z.id %}selected{% endif %}>
+                                {{ z.nombre }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold small">Buscar por Título</label>
+                    <div class="input-group">
+                        <input type="text" name="busqueda" class="form-control" placeholder="Ej: Falta limpieza..." value="{{ busqueda|default:'' }}">
+                        <button class="btn btn-outline-secondary" type="submit">Buscar</button>
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <a href="{% url 'lista_observaciones' %}" class="btn btn-link text-muted">Limpiar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+{# --- TABLA --- #}
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 10%;">Fecha</th>
+                        <th style="width: 10%;">Zona</th>
+                        <th style="width: 20%;">Título</th>
+                        <th style="width: 30%;">Comentario</th>
+                        <th style="width: 10%; text-align: center;">Foto</th>
+                        <th style="width: 20%; text-align: center;">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obs in observaciones %}
+                        <tr class="{% if obs.resuelto %}table-success bg-opacity-10{% endif %}">
+                            <td class="small">{{ obs.fecha|date:"d/m/Y" }}</td>
+                            <td><span class="badge bg-secondary">{{ obs.zona.nombre }}</span></td>
+                            <td class="fw-bold">{{ obs.nombre }}</td>
+                            <td class="text-muted small">{{ obs.comentario|linebreaksbr }}</td>
+                            
+                            {# COLUMNA FOTO #}
+                            <td class="text-center">
+                                {% if obs.imagen %}
+                                    <a href="{{ obs.imagen.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-image"></i> Ver
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+
+                            <td class="text-center">
+                                {% if obs.resuelto %}
+                                    <div class="d-flex flex-column align-items-center">
+                                        <span class="badge bg-success mb-1">
+                                            <i class="bi bi-check-circle-fill"></i> Resuelto
+                                        </span>
+                                        <small class="text-muted" style="font-size: 0.75rem;">
+                                            {{ obs.resuelto_por.username|default:"Usuario" }} <br>
+                                            {{ obs.fecha_resolucion|date:"d/m" }}
+                                        </small>
+                                    </div>
+                                {% else %}
+                                    <a href="{% url 'marcar_observacion_resuelta' obs.id %}" class="btn btn-outline-danger btn-sm fw-bold">
+                                        <i class="bi bi-square"></i> Resolver
+                                    </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                No hay observaciones pendientes.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -28,12 +28,9 @@ urlpatterns = [
     path('bim/registrar/', views.registrar_avance_bim, name='registrar_avance_bim'),
 
     # --- URLs DE API ---
-    
-    # --- NUEVA URL DE API (Paso 6.5) ---
     path('api/bim/status-general/', 
          views.ElementoStatusAPIView.as_view(), 
          name='api_bim_status_general'),
-    # --- FIN NUEVA URL ---
 
     path('api/buscar-elementos/',
          views.buscar_elementos_constructivos,
@@ -44,8 +41,9 @@ urlpatterns = [
     
     path('api/generar-rango/', views.api_generar_rango, name='api_generar_rango'),
     
-   path('cronograma/', views.vista_cronograma, name='vista_cronograma'),
-    path('cronograma/nuevo/', views.crear_tarea_cronograma, name='crear_tarea_cronograma'), # <--- URL ACTUALIZADA
+    # --- URLs CRONOGRAMA ---
+    path('cronograma/', views.vista_cronograma, name='vista_cronograma'),
+    path('cronograma/nuevo/', views.crear_tarea_cronograma, name='crear_tarea_cronograma'), 
     path('cronograma/editar/<int:pk>/', views.editar_fechas_cronograma, name='editar_fechas_cronograma'),
     
     path('cronograma/movil/', views.vista_cronograma_movil, name='cronograma_movil'),
@@ -53,4 +51,9 @@ urlpatterns = [
     # APIs internas para los selectores dinámicos
     path('api/cronograma/hijos/<int:padre_id>/', views.api_hijos_cronograma, name='api_hijos_cronograma'),
     path('api/cronograma/detalle/<int:tarea_id>/', views.api_detalle_tarea, name='api_detalle_tarea'),
+
+    # --- NUEVAS URLs: OBSERVACIONES ---
+    path('observaciones/', views.lista_observaciones, name='lista_observaciones'),
+    path('observaciones/nueva/', views.crear_observacion, name='crear_observacion'),
+    path('observaciones/resolver/<int:pk>/', views.marcar_observacion_resuelta, name='marcar_observacion_resuelta'),
 ]

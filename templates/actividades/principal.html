@@ -7,8 +7,8 @@
         <h1 class="display-5 fw-bold">Panel de Control de Obra</h1>
         <div class="col-lg-8 mx-auto">
             <p class="lead mb-4">
-                Bienvenido. Desde aquí puedes registrar reportes
-                o consultar el historial y el clima del proyecto.
+                Bienvenido. Desde aquí puedes registrar reportes,
+                gestionar observaciones o consultar el cronograma del proyecto.
             </p>
         </div>
     </div>
@@ -17,60 +17,68 @@
         <div class="row">
             {# --- Tarjeta 1: Acciones Generales --- #}
             <div class="col-md-4">
-                <div class="seccion-accion">
-                    <h2>Acciones Generales</h2>
+                <div class="seccion-accion h-100">
+                    <h2>Acciones Diarias</h2>
                     <p>
-                        Registra nuevos reportes de avances o de maquinaria.
+                        Registro de avances, reportes y observaciones de campo.
                     </p>
                     <div class="d-grid gap-2">
-                        <a href="{% url 'registrar_avance' %}" class="btn btn-primary btn-lg">Registrar Avance</a>
-                        <a href="{% url 'registrar_avance_bim' %}" class="btn btn-primary btn-lg">Registrar Avance BIM</a>
-                        <a href="{% url 'cronograma_movil' %}" class="btn btn-warning btn-lg fw-bold text-dark">
+                        <a href="{% url 'registrar_avance' %}" class="btn btn-primary">Registrar Avance</a>
+                        
+                        {# --- NUEVO BOTÓN OBSERVACIÓN --- #}
+                        <a href="{% url 'crear_observacion' %}" class="btn btn-outline-danger fw-bold">
+                            <i class="bi bi-exclamation-circle"></i> Registrar Observación
+                        </a>
+                        {# --- FIN NUEVO BOTÓN --- #}
+
+                        <a href="{% url 'cronograma_movil' %}" class="btn btn-warning text-dark fw-bold">
                             <i class="bi bi-calendar-week"></i> Actualizar Cronograma
                         </a>
                     </div>
                 </div>
             </div>
 
-            {# --- Tarjeta 2: Gestión por Proyecto (MODIFICADA) --- #}
+            {# --- Tarjeta 2: Gestión por Proyecto --- #}
             <div class="col-md-4">
-                <div class="seccion-accion">
+                <div class="seccion-accion h-100">
                     <h2>Gestión por Proyecto</h2>
                     <p>
-                        Accede al historial de costos/cantidades o al cronograma de tiempos.
+                        Historial, WBS y Cronograma Maestro.
                     </p>
                     <div class="list-group">
                         {% for proyecto in proyectos %}
-                            {# Contenedor flexible para alinear nombre a la izq y botón a la der #}
                             <div class="list-group-item d-flex justify-content-between align-items-center">
-                                
-                                {# Enlace al Historial Original (Nombre del Proyecto) #}
                                 <a href="{% url 'historial_avance' proyecto.pk %}" class="text-decoration-none text-dark fw-bold">
                                     {{ proyecto.nombre }}
                                 </a>
-
-                                {# Nuevo Botón para ir a la Tabla del Cronograma #}
                                 <a href="{% url 'vista_cronograma' %}" class="btn btn-sm btn-success">
                                     Ver Cronograma
                                 </a>
-
                             </div>
                         {% empty %}
                             <p class="text-muted p-3">No hay proyectos registrados.</p>
                         {% endfor %}
                     </div>
+                    
+                    {# Acceso a la lista completa de observaciones #}
+                    <div class="mt-3 d-grid">
+                        <a href="{% url 'lista_observaciones' %}" class="btn btn-light border">
+                            Ver Todas las Observaciones
+                        </a>
+                    </div>
                 </div>
             </div>
 
-            {# --- Tarjeta 3: Consulta Climatológica --- #}
+            {# --- Tarjeta 3: Otros --- #}
             <div class="col-md-4">
-                <div class="seccion-accion">
-                    <h2>Consulta Climatológica</h2>
+                <div class="seccion-accion h-100">
+                    <h2>Herramientas</h2>
                     <p>
-                        Consulta el pronóstico del tiempo para la ubicación del proyecto.
+                        Utilidades adicionales y consultas externas.
                     </p>
                     <div class="d-grid gap-2">
-                        <a href="{% url 'vista_clima' %}" class="btn btn-info btn-lg text-white">Ver Pronóstico del Clima</a>
+                         <a href="{% url 'registrar_avance_bim' %}" class="btn btn-secondary">Avance BIM</a>
+                        <a href="{% url 'vista_clima' %}" class="btn btn-info text-white">Ver Pronóstico del Clima</a>
                     </div>
                 </div>
             </div>

@@ -4,23 +4,23 @@ from django.views.decorators.http import require_GET
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.db.models import Sum, Q, Prefetch, Count 
+from django.db.models import Sum, Q, Prefetch, Count, Max, Min 
 from django.views.generic import ListView, CreateView, UpdateView
 from django.urls import reverse_lazy, reverse
 from datetime import date, timedelta
 from django.db import IntegrityError, transaction
 from django.core.exceptions import ValidationError 
-from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+
 from rest_framework.generics import ListAPIView
-from django.db.models import Count, Max, Min 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication
+
 from .serializers import ElementoBIM_GUID_Serializer
 from .forms import (
     ReporteMaquinariaForm, ReportePersonalForm, ActividadForm,
     ConsultaClimaForm, AvanceDiarioForm, AvancePorZonaFormSet,
-    MetaPorZonaFormSet, SeleccionarElementoForm, CronogramaHibridoForm, CronogramaForm
+    MetaPorZonaFormSet, SeleccionarElementoForm, CronogramaHibridoForm, CronogramaForm,
+    ObservacionForm # <--- IMPORTAR
 )
 from .services import obtener_y_guardar_clima
 from .models import (
@@ -28,17 +28,13 @@ from .models import (
     Empresa, Cargo, AreaDeTrabajo, ReporteDiarioMaquinaria, Proyecto,
     AvancePorZona, MetaPorZona, ElementoConstructivo, 
     PasoProcesoTipoElemento, AvanceProcesoElemento, TipoElemento,
-    ElementoBIM_GUID, Cronograma
+    ElementoBIM_GUID, Cronograma, Observacion # <--- IMPORTAR
 )
 
 def es_staff(user):
-    """
-    Función de prueba para el decorador user_passes_test.
-    Debe estar definida antes de ser usada.
-    """
     return user.is_staff
 
-# ... (El resto de tus vistas: historial_avance_view, etc. no cambian) ...
+# ... (Las vistas existentes hasta historial_avance_view no cambian) ...
 def historial_avance_view(request, proyecto_id):
     proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
     semanas = Semana.objects.all()
@@ -59,7 +55,6 @@ def historial_avance_view(request, proyecto_id):
 
     total_real_ev_acumulado = sum(avance.cantidad_total for avance in avances_totales_acumulados)
     
-
     if total_programado_pv_acumulado and total_programado_pv_acumulado > 0:
         spi_calculado = total_real_ev_acumulado / total_programado_pv_acumulado
         spi_acumulado = min(spi_calculado, 2.0) 
@@ -146,7 +141,7 @@ class ActividadCreateView(CreateView):
                     messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
                     if formset.non_form_errors():
                         messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
-                    return self.form_invalid(form) # Llama al método de abajo
+                    return self.form_invalid(form)
 
                 formset.save()
                 messages.success(self.request, 'Actividad con metas por zona creada con éxito.')
@@ -160,22 +155,12 @@ class ActividadCreateView(CreateView):
 
         return super().form_valid(form)
 
-    # --- MÉTODO AÑADIDO ---
     def form_invalid(self, form):
-        """
-        Se llama cuando el formulario principal (ActividadForm) no es válido.
-        """
-        # Añade un mensaje de error general. Los errores específicos de cada campo
-        # se mostrarán automáticamente junto a los campos del formulario.
         messages.error(self.request, 'El formulario es inválido. Por favor, revisa los campos marcados en rojo.')
-        
-        # También nos aseguramos de pasar el formset inválido (si existe) de vuelta a la plantilla
         context = self.get_context_data(form=form)
         if self.request.POST:
             context['formset'] = MetaPorZonaFormSet(self.request.POST)
-        
         return self.render_to_response(context)
-    # --- FIN MÉTODO AÑADIDO ---
 
     def get_initial(self):
         initial = super().get_initial()
@@ -208,14 +193,11 @@ class ActividadUpdateView(UpdateView):
 
         try:
             with transaction.atomic():
-                # --- LÓGICA MODIFICADA ---
-                # Se simplificó la comprobación de validez
                 if not formset.is_valid():
                     messages.error(self.request, 'Por favor, corrige los errores en el desglose de metas por zona.')
                     if formset.non_form_errors():
                         messages.warning(self.request, f"Errores generales en el desglose: {formset.non_form_errors()}")
-                    return self.form_invalid(form) # Llama al método de abajo
-                # --- FIN LÓGICA MODIFICADA ---
+                    return self.form_invalid(form)
 
                 self.object = form.save()
                 formset.save()
@@ -231,20 +213,13 @@ class ActividadUpdateView(UpdateView):
             
         return super().form_valid(form)
 
-    # --- MÉTODO AÑADIDO ---
     def form_invalid(self, form):
-        """
-        Se llama cuando el formulario principal (ActividadForm) no es válido.
-        """
         messages.error(self.request, 'El formulario es inválido. Por favor, revisa los campos marcados en rojo.')
-        
-        # Aseguramos que el formset se pase correctamente en caso de error
         context = self.get_context_data(form=form)
         if self.request.POST:
             context['formset'] = MetaPorZonaFormSet(self.request.POST, instance=self.object)
-        
         return self.render_to_response(context)
-    # --- FIN MÉTODO AÑADIDO ---
+
 
 def registrar_avance(request):
     proyecto = Proyecto.objects.first()
@@ -302,10 +277,7 @@ def registrar_avance(request):
                         messages.error(request, 'Por favor, corrige los errores en el desglose por zonas.')
                 
             except ValidationError:
-                # --- MENSAJE AÑADIDO ---
-                # El form.add_error se mostrará en el formulario, pero añadimos un mensaje global también
                 messages.error(request, "Debes registrar el avance para al menos una zona.")
-                # --- FIN MENSAJE AÑADIDO ---
             except IntegrityError:
                 messages.error(request, "Error de integridad. No se pudo guardar el avance.")
             except Exception as e:
@@ -334,7 +306,7 @@ def registrar_avance(request):
 
 
 @login_required
-@user_passes_test(es_staff) # Esta es la línea 318
+@user_passes_test(es_staff)
 def editar_avance(request, pk):
     avance = get_object_or_404(AvanceDiario, pk=pk)
     form = AvanceDiarioForm(request.POST or None, instance=avance)
@@ -344,10 +316,8 @@ def editar_avance(request, pk):
         try:
             with transaction.atomic():
                 if not form.is_valid() or not formset.is_valid():
-                    # --- LÓGICA DE MENSAJES AÑADIDA ---
                     if not form.is_valid():
                         messages.error(request, 'El formulario principal es inválido. Revisa los campos de actividad, fecha y empresa.')
-                    # --- FIN LÓGICA AÑADIDA ---
                     
                     if not formset.is_valid():
                         messages.error(request, 'Por favor, corrige los errores en el desglose.')
@@ -366,9 +336,7 @@ def editar_avance(request, pk):
                 return redirect('historial_avance', proyecto_id=avance.actividad.proyecto.id)
 
         except ValidationError:
-            # --- MENSAJE AÑADIDO ---
             messages.error(request, "No puedes eliminar todas las zonas. Debe quedar al menos una.")
-            # --- FIN MENSAJE AÑADIDO ---
         except IntegrityError:
              messages.error(request, "Error de integridad al actualizar.")
         except Exception as e:
@@ -472,31 +440,25 @@ def vista_clima(request):
             reporte = obtener_y_guardar_clima(fecha_seleccionada)
             if not reporte:
                  messages.error(request, f"No se pudieron obtener los datos del clima para {fecha_seleccionada}.")
-        # --- BLOQUE AÑADIDO ---
         else:
             messages.error(request, "La fecha seleccionada no es válida. Por favor, corrígela.")
-        # --- FIN BLOQUE AÑADIDO ---
 
     contexto = {'form': form, 'reporte': reporte}
     return render(request, 'actividades/vista_clima.html', contexto)
 
-# --- VISTAS DE API PARA FORMULARIO BIM DINÁMICO ---
+# --- VISTAS DE API Y BIM ---
 
-# --- 2. MODIFICAR buscar_elementos_constructivos ---
 @require_GET
 def buscar_elementos_constructivos(request):
     query = request.GET.get('term', '')
     if len(query) < 2:
         return JsonResponse([], safe=False)
     
-    # Lógica de búsqueda OR actualizada
-    # Busca en 'identificador_unico' O en la relación 'guids_bim__identificador_bim'
     elementos = ElementoConstructivo.objects.filter(
         Q(identificador_unico__icontains=query) |
         Q(guids_bim__identificador_bim__icontains=query)
-    ).select_related('tipo_elemento').distinct()[:10] # .distinct() es clave
+    ).select_related('tipo_elemento').distinct()[:10] 
     
-    # El texto de resultado ahora solo muestra el ID legible (código de ejes)
     resultados = [
         {
             'id': el.id, 
@@ -505,7 +467,6 @@ def buscar_elementos_constructivos(request):
         for el in elementos
     ]
     return JsonResponse(resultados, safe=False)
-# --- FIN MODIFICACIÓN ---
 
 @require_GET
 def obtener_pasos_y_avance_elemento(request, elemento_id):
@@ -538,14 +499,12 @@ def obtener_pasos_y_avance_elemento(request, elemento_id):
 
 def registrar_avance_bim(request):
     if request.method == 'POST':
-        # 1. Obtener la cadena de IDs (ej: "10,25,33")
         elementos_ids_str = request.POST.get('elementos_ids', '')
         
         if not elementos_ids_str:
             messages.error(request, "No se seleccionó ningún elemento.")
             return redirect('registrar_avance_bim')
 
-        # Convertir a lista de enteros
         try:
             ids_list = [int(id_str) for id_str in elementos_ids_str.split(',') if id_str.isdigit()]
         except ValueError:
@@ -556,7 +515,6 @@ def registrar_avance_bim(request):
              messages.error(request, "Lista de elementos vacía.")
              return redirect('registrar_avance_bim')
 
-        # 2. Obtener datos del formulario (Pasos y Fechas)
         pasos_ids_enviados = request.POST.getlist('paso_id')
         fechas_enviadas = request.POST.getlist('fecha_finalizacion')
 
@@ -569,27 +527,17 @@ def registrar_avance_bim(request):
 
         try:
             with transaction.atomic():
-                # Validar que todos los elementos sean del mismo TipoElemento
-                # Usamos el tipo del primer elemento como referencia
                 primer_elemento = ElementoConstructivo.objects.get(pk=ids_list[0])
                 tipo_referencia = primer_elemento.tipo_elemento
 
                 elementos_queryset = ElementoConstructivo.objects.filter(pk__in=ids_list)
                 
-                # Verificación de seguridad de tipos
                 if elementos_queryset.filter(tipo_elemento=tipo_referencia).count() != len(ids_list):
                     raise ValidationError("Todos los elementos seleccionados deben ser del mismo Tipo (ej. todos Columnas). No mezcles tipos.")
 
-                # 3. Iterar sobre CADA elemento seleccionado
                 for elemento in elementos_queryset:
-                    
                     cambio_realizado_en_elemento = False
-
-                    # Iterar sobre los pasos enviados
                     for paso_id_str, fecha_str in zip(pasos_ids_enviados, fechas_enviadas):
-                        # Solo procesamos si el usuario mandó una fecha (para actualizar)
-                        # OJO: En bulk update, si dejan la fecha vacía, NO borramos el avance existente,
-                        # simplemente lo ignoramos para no borrar datos accidentalmente en masa.
                         if fecha_str: 
                             try:
                                 paso_id = int(paso_id_str)
@@ -625,7 +573,7 @@ def registrar_avance_bim(request):
         except ValidationError as e:
             if hasattr(e, 'message'):
                  messages.error(request, e.message)
-            elif hasattr(e, 'messages'): # Para listas de errores
+            elif hasattr(e, 'messages'):
                  for err in e.messages:
                      messages.error(request, err)
             else:
@@ -636,7 +584,6 @@ def registrar_avance_bim(request):
         except Exception as e: 
             messages.error(request, f"Error inesperado: {e}")
 
-    # GET request
     form = SeleccionarElementoForm()
     context = {
         'form': form,
@@ -646,11 +593,7 @@ def registrar_avance_bim(request):
     return render(request, 'actividades/registrar_avance_bim.html', context)
 
 
-# --- 3. MODIFICAR VISTA DE API (ElementoStatusAPIView) ---
 class ElementoStatusAPIView(ListAPIView):
-    """
-    API de solo lectura para exponer el estado y fechas de los elementos constructivos.
-    """
     serializer_class = ElementoBIM_GUID_Serializer
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -668,26 +611,18 @@ class ElementoStatusAPIView(ListAPIView):
                 'elemento_constructivo__avances_proceso', 
                 distinct=True
             ),
-            # Ya tenías la última fecha (Fin)
             ultima_fecha=Max('elemento_constructivo__avances_proceso__fecha_finalizacion'),
-            
-            # [2] AGREGAMOS LA PRIMERA FECHA (Inicio)
             primera_fecha=Min('elemento_constructivo__avances_proceso__fecha_finalizacion')
         )
             
 @require_GET
 def api_generar_rango(request):
-    """
-    API que genera una lista de códigos basada en un patrón (ej. 'ZC-{}AA')
-    y un rango (numérico o alfabético), y devuelve los IDs encontrados en la BD.
-    """
-    patron = request.GET.get('patron', '')    # Ej: "ZA-B{}"
-    tipo_rango = request.GET.get('tipo', 'numero') # 'numero' o 'letra'
+    patron = request.GET.get('patron', '')    
+    tipo_rango = request.GET.get('tipo', 'numero') 
     inicio = request.GET.get('inicio', '')
     fin = request.GET.get('fin', '')
-    usar_ceros = request.GET.get('ceros') == 'true' # 'true' o 'false'
+    usar_ceros = request.GET.get('ceros') == 'true'
 
-    # 1. Validaciones básicas
     if not patron or not inicio or not fin:
         return JsonResponse({'error': 'Faltan parámetros (patrón, inicio o fin).'}, status=400)
     
@@ -697,51 +632,36 @@ def api_generar_rango(request):
     candidatos = []
 
     try:
-        # 2. Generación de candidatos según el tipo
         if tipo_rango == 'numero':
             start_int = int(inicio)
             end_int = int(fin)
-            
             if start_int > end_int:
                 return JsonResponse({'error': 'El inicio numérico debe ser menor al fin.'}, status=400)
-            
-            # Generamos la secuencia (ej. 101, 102... 110)
             for i in range(start_int, end_int + 1):
-                # Si piden ceros (ej. 01, 02), usamos zfill(2). 
-                # Si el número ya es 100, zfill(2) no le hace nada (correcto).
                 val = str(i).zfill(2) if usar_ceros else str(i)
                 candidatos.append(patron.format(val))
 
         elif tipo_rango == 'letra':
-            # Solo permitimos 1 letra para simplificar
             if len(inicio) != 1 or len(fin) != 1:
                 return JsonResponse({'error': 'Para rangos de letras, usa solo un caracter (Ej: A a F).'}, status=400)
-                
             start_ord = ord(inicio.upper())
             end_ord = ord(fin.upper())
-            
             if start_ord > end_ord:
                 return JsonResponse({'error': 'La letra inicial debe ir antes que la final en el alfabeto.'}, status=400)
-            
             for i in range(start_ord, end_ord + 1):
-                val = chr(i) # Convertir código ASCII de vuelta a Letra
+                val = chr(i) 
                 candidatos.append(patron.format(val))
-        
         else:
              return JsonResponse({'error': 'Tipo de rango no válido.'}, status=400)
 
     except ValueError:
         return JsonResponse({'error': 'Los valores de inicio/fin no son válidos para el tipo seleccionado.'}, status=400)
 
-    # 3. Consultar Base de Datos
-    # Buscamos cuáles de estos "candidatos" existen realmente
     elementos_encontrados = ElementoConstructivo.objects.filter(
         identificador_unico__in=candidatos
     ).values('id', 'identificador_unico')
 
     data = list(elementos_encontrados)
-    
-    # Formatear para TomSelect (id, text)
     resultados_json = [{'id': e['id'], 'text': e['identificador_unico']} for e in data]
 
     return JsonResponse({
@@ -751,43 +671,43 @@ def api_generar_rango(request):
     })
 
 
-def vista_cronograma(request, proyecto_id):
-    proyecto = get_object_or_404(Proyecto, pk=proyecto_id)
-    
-    # Traemos solo los padres (Raíces) y pre-cargamos los hijos para eficiencia
-    # Asumimos una jerarquía de 2 niveles como en tu imagen (Categoria -> Actividad)
-    nodos_raiz = Cronograma.objects.filter(
-        proyecto=proyecto, 
-        padre__isnull=True
-    ).prefetch_related('sub_tareas')
-
-    context = {
-        'proyecto': proyecto,
-        'nodos_raiz': nodos_raiz
-    }
-    return render(request, 'actividades/cronograma_list.html', context)
+# --- CRONOGRAMA POR ZONAS (REESCRITO) ---
 
 def vista_cronograma(request):
-    # 1. Obtener proyecto automático
+    """
+    Vista reescrita para mostrar tareas filtradas por Zona.
+    """
     proyecto = Proyecto.objects.first()
     if not proyecto:
         messages.error(request, "No hay proyectos registrados.")
         return redirect('pagina_principal')
 
-    # 2. CAMBIO CLAVE: Traer directamente el NIVEL 2 (Zonas)
-    # Filtramos actividades que TIENEN padre (son hijos) Y cuyo padre NO tiene padre (es raíz).
-    # Esto nos da exactamente el segundo nivel de la jerarquía.
-    zonas_nivel_2 = Cronograma.objects.filter(
-        proyecto=proyecto, 
-        padre__isnull=False,        # Tiene padre
-        padre__padre__isnull=True   # Su padre es raíz (Nivel 1)
-    ).select_related('padre').prefetch_related(
-        'sub_tareas' # Traemos las actividades finales (Nivel 3)
-    ).order_by('padre__id', 'id') # Ordenamos por el ID del padre para mantener agrupación lógica
+    # 1. Obtener todas las zonas para el selector
+    zonas_list = AreaDeTrabajo.objects.all().order_by('nombre')
+
+    # 2. Verificar si hay una zona seleccionada en el GET
+    zona_seleccionada_id = request.GET.get('zona_id')
+    tareas = None
+    zona_obj = None
+
+    if zona_seleccionada_id:
+        try:
+            zona_obj = AreaDeTrabajo.objects.get(pk=zona_seleccionada_id)
+            # 3. Filtrar tareas que tengan ESTA zona asignada
+            # Usamos prefetch_related para eficiencia si tuviéramos sub-tareas,
+            # pero aquí traemos la lista plana o jerárquica que coincida.
+            tareas = Cronograma.objects.filter(
+                proyecto=proyecto,
+                zonas=zona_obj
+            ).order_by('fecha_inicio_prog') 
+        except AreaDeTrabajo.DoesNotExist:
+            messages.error(request, "La zona seleccionada no existe.")
 
     context = {
         'proyecto': proyecto,
-        'zonas': zonas_nivel_2 # Pasamos las zonas directo al template
+        'zonas_list': zonas_list,
+        'zona_seleccionada': zona_obj,
+        'tareas': tareas
     }
     return render(request, 'actividades/cronograma_list.html', context)
 
@@ -807,6 +727,9 @@ def crear_tarea_cronograma(request):
             tarea = form.save(commit=False)
             tarea.proyecto = proyecto
             tarea.save()
+            # Guardamos la relación ManyToMany (zonas)
+            form.save_m2m()
+            
             messages.success(request, f"Actividad '{tarea.nombre}' creada exitosamente.")
             return redirect('vista_cronograma')
             
@@ -822,7 +745,11 @@ def editar_fechas_cronograma(request, pk):
     
     if request.method == 'POST':
         if form.is_valid():
-            form.save()
+            tarea_guardada = form.save()
+            # El formulario CronogramaHibridoForm no incluía 'zonas' en su definición
+            # original, asegúrate de que esté en fields o save_m2m no hará nada nuevo.
+            # (Ya lo añadimos en el paso anterior de forms.py)
+            
             messages.success(request, f"Actividad '{tarea.nombre}' actualizada.")
             return redirect('vista_cronograma')
 
@@ -832,13 +759,8 @@ def editar_fechas_cronograma(request, pk):
     })
 
 def vista_cronograma_movil(request):
-    """
-    Vista optimizada para móviles que permite actualizar fechas
-    mediante filtros en cascada (Nivel 1 -> Nivel 2 -> Actividad).
-    """
-    proyecto = Proyecto.objects.first() # Asumimos un proyecto activo
+    proyecto = Proyecto.objects.first() 
     
-    # Procesar Guardado del Formulario
     if request.method == 'POST':
         tarea_id = request.POST.get('tarea_id')
         inicio_real = request.POST.get('fecha_inicio_real')
@@ -846,19 +768,14 @@ def vista_cronograma_movil(request):
         
         if tarea_id:
             tarea = get_object_or_404(Cronograma, pk=tarea_id)
-            
-            # Convertir strings vacíos a None para limpiar la fecha si se borra
             tarea.fecha_inicio_real = inicio_real if inicio_real else None
             tarea.fecha_fin_real = fin_real if fin_real else None
-            
             tarea.save()
             messages.success(request, f"Actualizado: {tarea.nombre}")
             return redirect('cronograma_movil')
         else:
             messages.error(request, "Error: No se seleccionó ninguna tarea.")
 
-    # Carga inicial: Solo Nivel 1 (Categorías Raíz)
-    # Filtramos las que NO tienen padre
     categorias_nivel_1 = Cronograma.objects.filter(
         proyecto=proyecto,
         padre__isnull=True
@@ -873,14 +790,12 @@ def vista_cronograma_movil(request):
 
 @require_GET
 def api_hijos_cronograma(request, padre_id):
-    """Retorna los hijos de un nodo Cronograma en JSON para los selectores."""
     hijos = Cronograma.objects.filter(padre_id=padre_id).values('id', 'nombre').order_by('id')
     return JsonResponse(list(hijos), safe=False)
 
 
 @require_GET
 def api_detalle_tarea(request, tarea_id):
-    """Retorna las fechas actuales de una tarea para pre-llenar el formulario."""
     tarea = get_object_or_404(Cronograma, pk=tarea_id)
     data = {
         'id': tarea.id,
@@ -889,3 +804,75 @@ def api_detalle_tarea(request, tarea_id):
         'fecha_fin_real': tarea.fecha_fin_real,
     }
     return JsonResponse(data)
+
+
+# --- NUEVAS VISTAS: OBSERVACIONES ---
+
+def lista_observaciones(request):
+    """
+    Muestra la lista de observaciones con filtros.
+    """
+    zonas = AreaDeTrabajo.objects.all()
+    
+    # Filtros
+    zona_id = request.GET.get('zona_filtro')
+    busqueda = request.GET.get('busqueda')
+    
+    observaciones = Observacion.objects.all().order_by('-fecha')
+    
+    if zona_id:
+        observaciones = observaciones.filter(zona_id=zona_id)
+    if busqueda:
+        observaciones = observaciones.filter(nombre__icontains=busqueda)
+        
+    context = {
+        'observaciones': observaciones,
+        'zonas': zonas,
+        'zona_seleccionada_id': int(zona_id) if zona_id else None,
+        'busqueda': busqueda
+    }
+    return render(request, 'actividades/observacion_list.html', context)
+
+def crear_observacion(request):
+    """
+    Vista para registrar una nueva observación.
+    """
+    form = ObservacionForm(request.POST or None)
+    
+    if request.method == 'POST':
+        if form.is_valid():
+            try:
+                form.save()
+                messages.success(request, "Observación registrada correctamente.")
+                return redirect('lista_observaciones')
+            except IntegrityError:
+                messages.error(request, "Ya existe una observación con este nombre en esta zona y fecha.")
+        else:
+            messages.error(request, "Corrige los errores en el formulario.")
+            
+    return render(request, 'actividades/observacion_form.html', {'form': form})
+
+@login_required
+def marcar_observacion_resuelta(request, pk):
+    """
+    Marca una observación como resuelta por el usuario actual.
+    """
+    observacion = get_object_or_404(Observacion, pk=pk)
+    
+    if not observacion.resuelto:
+        observacion.resuelto = True
+        observacion.resuelto_por = request.user
+        observacion.fecha_resolucion = date.today()
+        observacion.save()
+        messages.success(request, f"Observación '{observacion.nombre}' marcada como resuelta.")
+    else:
+        # Opcional: Desmarcar si fue un error (toggle)
+        observacion.resuelto = False
+        observacion.resuelto_por = None
+        observacion.fecha_resolucion = None
+        observacion.save()
+        messages.warning(request, f"Observación '{observacion.nombre}' reabierta.")
+        
+    # Redirigir a la misma página desde donde se llamó (referer) o a la lista
+    next_url = request.META.get('HTTP_REFERER', 'lista_observaciones')
+    return redirect(next_url)

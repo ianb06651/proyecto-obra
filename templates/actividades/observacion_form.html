@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva Observación{% endblock %}
+
+{% block content %}
+<div class="card w-50 mx-auto mt-4 shadow">
+    <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Registrar Observación con Foto</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">Registra una incidencia. Puedes adjuntar una foto desde tu cámara.</p>
+        
+        {# ¡OJO! EL ENCTYPE ES CRUCIAL PARA SUBIR ARCHIVOS #}
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <div class="mb-3">
+                <label class="form-label fw-bold">Fecha</label>
+                {{ form.fecha }}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Zona</label>
+                {{ form.zona }}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Título</label>
+                {{ form.nombre }}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Evidencia (Foto)</label>
+                {{ form.imagen }}
+                <div class="form-text">Toca aquí para abrir la cámara o galería.</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Detalle</label>
+                {{ form.comentario }}
+            </div>
+
+            <hr>
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{% url 'lista_observaciones' %}" class="btn btn-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-danger">Guardar Observación</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
