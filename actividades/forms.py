@@ -194,17 +194,21 @@ class CronogramaHibridoForm(forms.ModelForm):
     class Meta:
         model = Cronograma
         fields = [
-            'nombre', 'zonas', # <--- AÑADIDO
+            'nombre',
+            'zonas',
             'fecha_inicio_prog', 'fecha_fin_prog', 
             'fecha_inicio_real', 'fecha_fin_real'
         ]
         widgets = {
             'nombre': forms.TextInput(attrs={'class': 'form-control fw-bold'}),
-            'zonas': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'}), # <--- AÑADIDO
-            'fecha_inicio_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_fin_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_inicio_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control border-primary'}),
-            'fecha_fin_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control border-primary'}),
+            
+            # Usamos CheckboxSelectMultiple para que sea fácil ver qué está marcado
+            'zonas': forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled mb-0'}),
+            
+            'fecha_inicio_prog': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_fin_prog': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_inicio_real': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control border-primary'}),
+            'fecha_fin_real': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control border-primary'}),
         }
 
 class CronogramaForm(forms.ModelForm):
@@ -214,7 +218,7 @@ class CronogramaForm(forms.ModelForm):
         widgets = {
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la Actividad'}),
             'padre': forms.Select(attrs={'class': 'form-select'}),
-            'zonas': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '4'}), # <--- AÑADIDO
+            'zonas': forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled mb-0'}),
             'fecha_inicio_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'fecha_fin_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
         }

@@ -837,7 +837,8 @@ def crear_observacion(request):
     """
     Vista para registrar una nueva observación.
     """
-    form = ObservacionForm(request.POST or None)
+    # CAMBIO AQUI: Añadido request.FILES or None
+    form = ObservacionForm(request.POST or None, request.FILES or None)
     
     if request.method == 'POST':
         if form.is_valid():
@@ -854,9 +855,7 @@ def crear_observacion(request):
 
 @login_required
 def marcar_observacion_resuelta(request, pk):
-    """
-    Marca una observación como resuelta por el usuario actual.
-    """
+    # ... [CÓDIGO EXISTENTE DE ESTA FUNCIÓN SIN CAMBIOS] ...
     observacion = get_object_or_404(Observacion, pk=pk)
     
     if not observacion.resuelto:
@@ -866,13 +865,26 @@ def marcar_observacion_resuelta(request, pk):
         observacion.save()
         messages.success(request, f"Observación '{observacion.nombre}' marcada como resuelta.")
     else:
-        # Opcional: Desmarcar si fue un error (toggle)
         observacion.resuelto = False
         observacion.resuelto_por = None
         observacion.fecha_resolucion = None
         observacion.save()
         messages.warning(request, f"Observación '{observacion.nombre}' reabierta.")
         
-    # Redirigir a la misma página desde donde se llamó (referer) o a la lista
     next_url = request.META.get('HTTP_REFERER', 'lista_observaciones')
     return redirect(next_url)
+
+# --- NUEVA FUNCIÓN AÑADIDA ---
+@login_required
+def eliminar_observacion(request, pk):
+    """
+    Permite borrar una observación. Requiere login.
+    """
+    observacion = get_object_or_404(Observacion, pk=pk)
+    
+    if request.method == 'POST':
+        observacion.delete()
+        messages.success(request, "La observación ha sido eliminada permanentemente.")
+        return redirect('lista_observaciones')
+    
+    return render(request, 'actividades/observacion_confirmar_borrado.html', {'observacion': observacion})

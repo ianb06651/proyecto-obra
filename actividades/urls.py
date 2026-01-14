@@ -56,4 +56,5 @@ urlpatterns = [
     path('observaciones/', views.lista_observaciones, name='lista_observaciones'),
     path('observaciones/nueva/', views.crear_observacion, name='crear_observacion'),
     path('observaciones/resolver/<int:pk>/', views.marcar_observacion_resuelta, name='marcar_observacion_resuelta'),
+    path('observaciones/eliminar/<int:pk>/', views.eliminar_observacion, name='eliminar_observacion'),
 ]

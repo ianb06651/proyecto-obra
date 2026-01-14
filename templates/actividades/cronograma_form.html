@@ -16,6 +16,17 @@
                 {{ form.nombre }}
             </div>
 
+            {# --- NUEVO BLOQUE: ZONAS --- #}
+            {# Esto muestra las zonas actuales marcadas. Si desmarcas, se borran. #}
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Zona(s) Asignada(s)</label>
+                <div class="card p-2 bg-light" style="max-height: 150px; overflow-y: auto;">
+                    {{ form.zonas }}
+                </div>
+                <div class="form-text small">Marca o desmarca las zonas correspondientes.</div>
+            </div>
+            {# --- FIN NUEVO BLOQUE --- #}
+
             <div class="row">
                 <div class="col-md-6 border-end">
                     <h6 class="text-muted mb-3">Planificación (Meta)</h6>
