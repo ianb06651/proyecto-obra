@@ -42,64 +42,69 @@
                     <h5 class="mb-0">Actividades en: <strong>{{ zona_seleccionada.nombre }}</strong></h5>
                 </div>
                 
-                <table class="table table-striped table-hover mb-0 align-middle">
-                    <thead class="table-dark text-center">
-                        <tr>
-                            <th style="text-align: left;">ACTIVIDAD</th>
-                            <th>INICIO PROG</th>
-                            <th>FIN PROG</th>
-                            <th>INICIO REAL</th>
-                            <th>FIN REAL</th>
-                            <th>ESTATUS</th>
-                            <th>ACCIONES</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for actividad in tareas %}
+                {# --- INICIO DE LA CORRECCIÓN: Contenedor responsivo --- #}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0 align-middle">
+                        <thead class="table-dark text-center">
                             <tr>
-                                <td class="fw-bold text-dark">
-                                    {{ actividad.nombre }}
-                                    {% if actividad.padre %}
-                                        <div class="small text-muted fw-normal">↳ {{ actividad.padre.nombre }}</div>
-                                    {% endif %}
-                                </td>
-                                
-                                <td class="text-center">{{ actividad.fecha_inicio_prog|date:"d/m/Y"|default:"-" }}</td>
-                                <td class="text-center">{{ actividad.fecha_fin_prog|date:"d/m/Y"|default:"-" }}</td>
-                                
-                                <td class="text-center text-primary fw-bold">{{ actividad.fecha_inicio_real|date:"d/m/Y"|default:"-" }}</td>
-                                <td class="text-center text-primary fw-bold">{{ actividad.fecha_fin_real|date:"d/m/Y"|default:"-" }}</td>
-
-                                <td class="text-center">
-                                    {% with st=actividad.estado_calculado %}
-                                        {% if "Atrasado" in st %}
-                                            <span class="badge bg-danger">Atrasado</span>
-                                        {% elif "Proceso" in st %}
-                                            <span class="badge bg-primary">En Proceso</span>
-                                        {% elif "Tiempo" in st or "Terminado" in st %}
-                                            <span class="badge bg-success">OK</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary text-dark bg-opacity-25">{{ st }}</span>
+                                <th style="text-align: left;">ACTIVIDAD</th>
+                                <th>INICIO PROG</th>
+                                <th>FIN PROG</th>
+                                <th>INICIO REAL</th>
+                                <th>FIN REAL</th>
+                                <th>ESTATUS</th>
+                                <th>ACCIONES</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for actividad in tareas %}
+                                <tr>
+                                    <td class="fw-bold text-dark">
+                                        {{ actividad.nombre }}
+                                        {% if actividad.padre %}
+                                            <div class="small text-muted fw-normal">↳ {{ actividad.padre.nombre }}</div>
                                         {% endif %}
-                                    {% endwith %}
-                                </td>
+                                    </td>
+                                    
+                                    <td class="text-center">{{ actividad.fecha_inicio_prog|date:"d/m/Y"|default:"-" }}</td>
+                                    <td class="text-center">{{ actividad.fecha_fin_prog|date:"d/m/Y"|default:"-" }}</td>
+                                    
+                                    <td class="text-center text-primary fw-bold">{{ actividad.fecha_inicio_real|date:"d/m/Y"|default:"-" }}</td>
+                                    <td class="text-center text-primary fw-bold">{{ actividad.fecha_fin_real|date:"d/m/Y"|default:"-" }}</td>
 
-                                <td class="text-center">
-                                    <a href="{% url 'editar_fechas_cronograma' actividad.id %}" class="btn btn-sm btn-outline-primary" title="Editar Fechas">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        {% empty %}
-                            <tr>
-                                <td colspan="7" class="text-center py-5 text-muted">
-                                    <i class="bi bi-info-circle fs-1 d-block mb-3"></i>
-                                    No hay actividades asignadas a esta zona.
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                                    <td class="text-center">
+                                        {% with st=actividad.estado_calculado %}
+                                            {% if "Atrasado" in st %}
+                                                <span class="badge bg-danger">Atrasado</span>
+                                            {% elif "Proceso" in st %}
+                                                <span class="badge bg-primary">En Proceso</span>
+                                            {% elif "Tiempo" in st or "Terminado" in st %}
+                                                <span class="badge bg-success">OK</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary text-dark bg-opacity-25">{{ st }}</span>
+                                            {% endif %}
+                                        {% endwith %}
+                                    </td>
+
+                                    <td class="text-center">
+                                        <a href="{% url 'editar_fechas_cronograma' actividad.id %}" class="btn btn-sm btn-outline-primary" title="Editar Fechas">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-5 text-muted">
+                                        <i class="bi bi-info-circle fs-1 d-block mb-3"></i>
+                                        No hay actividades asignadas a esta zona.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div> 
+                {# --- FIN DE LA CORRECCIÓN --- #}
+
             {% else %}
                 {# MENSAJE VACÍO #}
                 <div class="text-center py-5">
