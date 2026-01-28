@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 from django.db.models import Sum, Count, Max
 from functools import cached_property
-from django.contrib.auth.models import User  # <--- NUEVO IMPORT
+from django.contrib.auth.models import User
 
 # --- CATÁLOGOS ---
 class Empresa(models.Model):
@@ -446,43 +446,58 @@ class AvanceProcesoElemento(models.Model):
              
 class Cronograma(models.Model):
     """
-    Modelo independiente para el control de tiempos tipo Project/Excel.
-    No se mezcla con el WBS de costos/estimaciones.
+    Modelo MAESTRO. Solo define la jerarquía (WBS).
+    Ya no guarda fechas ni zonas directamente.
     """
     proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name='cronogramas')
     padre = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='sub_tareas')
     nombre = models.CharField("Actividad / Zona", max_length=255)
     
-    # --- NUEVO CAMPO: Relación Many-to-Many con Zonas (AreaDeTrabajo) ---
-    zonas = models.ManyToManyField(
-        AreaDeTrabajo, 
-        blank=True, 
-        related_name='tareas_cronograma',
-        verbose_name="Zonas Aplicables"
-    )
-    # --- FIN NUEVO CAMPO ---
-    
-    # Fechas Planificadas (Obligatorias para el plan)
-    fecha_inicio_prog = models.DateField("Inicio Programado", null=True, blank=True)
-    fecha_fin_prog = models.DateField("Fin Programado", null=True, blank=True)
-    
-    # Fechas Reales (Manuales mediante formulario)
-    fecha_inicio_real = models.DateField("Inicio Real", null=True, blank=True)
-    fecha_fin_real = models.DateField("Fin Real", null=True, blank=True)
+    # NOTA: Se han eliminado fecha_inicio_prog, fecha_fin_prog, etc.
+    # y el campo 'zonas'. Ahora todo eso vive en CronogramaPorZona.
 
     class Meta:
         verbose_name = "Actividad de Cronograma"
-        verbose_name_plural = "Cronograma (Project)"
-        ordering = ['fecha_inicio_prog', 'id'] 
+        verbose_name_plural = "Cronograma (Jerarquía)"
+        ordering = ['id']
 
     def __str__(self):
         return self.nombre
 
     @property
+    def es_padre(self):
+        return self.sub_tareas.exists()
+
+# --- NUEVO MODELO: CRONOGRAMA POR ZONA ---
+class CronogramaPorZona(models.Model):
+    """
+    Aquí es donde viven las fechas reales por cada zona.
+    Desacopla la actividad de su ejecución en cada lugar físico.
+    """
+    tarea = models.ForeignKey(Cronograma, on_delete=models.CASCADE, related_name='detalles_zona')
+    zona = models.ForeignKey(AreaDeTrabajo, on_delete=models.CASCADE, related_name='cronogramas_zona')
+    
+    # Fechas Planificadas Específicas para esta Zona
+    fecha_inicio_prog = models.DateField("Inicio Programado", null=True, blank=True)
+    fecha_fin_prog = models.DateField("Fin Programado", null=True, blank=True)
+    
+    # Fechas Reales Específicas para esta Zona
+    fecha_inicio_real = models.DateField("Inicio Real", null=True, blank=True)
+    fecha_fin_real = models.DateField("Fin Real", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Detalle de Cronograma por Zona"
+        verbose_name_plural = "Detalles de Cronograma por Zona"
+        unique_together = ('tarea', 'zona') # Una tarea solo puede aparecer una vez por zona
+        ordering = ['fecha_inicio_prog']
+
+    def __str__(self):
+        return f"{self.tarea.nombre} en {self.zona.nombre}"
+
+    @property
     def estado_calculado(self):
         """
-        Replica la lógica de tu Excel: 'Atrasado', 'Proceso', 'En tiempo'.
-        Power BI puede replicar esto con DAX, pero aquí sirve para la App.
+        Lógica de estado (Semáforo) aplicada a ESTA zona específica.
         """
         hoy = date.today()
         
@@ -494,25 +509,21 @@ class Cronograma(models.Model):
 
         # 2. Si ya inició pero no ha terminado (En Proceso)
         if self.fecha_inicio_real and not self.fecha_fin_real:
-            # Checar si ya venció la fecha fin programada
             if self.fecha_fin_prog and hoy > self.fecha_fin_prog:
-                return "Atrasado" # Está en proceso pero ya debió terminar
-            return "Proceso" # En proceso y dentro de tiempo
+                return "Atrasado"
+            return "Proceso"
 
         # 3. No ha iniciado
         if not self.fecha_inicio_real:
             if self.fecha_inicio_prog and hoy > self.fecha_inicio_prog:
                 return "Atrasado (No Inició)"
-            # Si hoy es antes del inicio, es "Por Iniciar" o "Tiempo"
             return "Por Iniciar"
         
         return "N/A"
 
-    @property
-    def es_padre(self):
-        return self.sub_tareas.exists()
+# --- FIN NUEVO MODELO ---
 
-# --- NUEVO MODELO: OBSERVACIONES ---
+
 class Observacion(models.Model):
     """
     Registra observaciones diarias en una zona específica, con soporte para
@@ -523,14 +534,12 @@ class Observacion(models.Model):
     nombre = models.CharField(max_length=255, verbose_name="Nombre / Título de la Observación")
     comentario = models.TextField(verbose_name="Descripción / Comentario")
     
-    # --- NUEVO CAMPO DE FOTO ---
     imagen = models.ImageField(
         upload_to='evidencia_observaciones/', 
         null=True, 
         blank=True, 
         verbose_name="Evidencia Fotográfica"
     )
-    # ---------------------------
     
     # Campos de Cumplimiento
     resuelto = models.BooleanField(default=False, verbose_name="¿Resuelto?")

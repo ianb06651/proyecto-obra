@@ -9,7 +9,7 @@ from .models import (
     PartidaActividad, AvanceDiario, ReporteClima,
     MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
     ElementoConstructivo, AvanceProcesoElemento,
-    AreaDeTrabajo, Cronograma, Observacion
+    AreaDeTrabajo, Cronograma, Observacion, CronogramaPorZona
 )
 
 # --- Formularios sin cambios ---
@@ -190,52 +190,53 @@ class AvanceProcesoElementoForm(forms.ModelForm):
         fields = ['paso_proceso', 'fecha_finalizacion']
         widgets = {'paso_proceso': forms.HiddenInput()}
         
-class CronogramaHibridoForm(forms.ModelForm):
-    class Meta:
-        model = Cronograma
-        fields = [
-            'nombre',
-            'zonas',
-            'fecha_inicio_prog', 'fecha_fin_prog', 
-            'fecha_inicio_real', 'fecha_fin_real'
-        ]
-        widgets = {
-            'nombre': forms.TextInput(attrs={'class': 'form-control fw-bold'}),
-            
-            # Usamos CheckboxSelectMultiple para que sea fácil ver qué está marcado
-            'zonas': forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled mb-0'}),
-            
-            'fecha_inicio_prog': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_fin_prog': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_inicio_real': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control border-primary'}),
-            'fecha_fin_real': forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date', 'class': 'form-control border-primary'}),
-        }
+# actividades/forms.py (Actualización parcial)
 
 class CronogramaForm(forms.ModelForm):
+    """
+    Formulario para CREAR una nueva actividad MAESTRA.
+    Preguntamos el nombre y las zonas donde aplicará.
+    """
+    # Agregamos un campo extra que no está en el modelo Cronograma, 
+    # sino que usaremos para crear los hijos en CronogramaPorZona.
+    zonas_aplicables = forms.ModelMultipleChoiceField(
+        queryset=AreaDeTrabajo.objects.all(),
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        required=True,
+        label="Zonas donde aplica esta actividad"
+    )
+
     class Meta:
         model = Cronograma
-        fields = ['nombre', 'padre', 'zonas', 'fecha_inicio_prog', 'fecha_fin_prog'] # <--- AÑADIDO ZONAS
+        fields = ['nombre', 'padre', 'proyecto'] # Quitamos fechas y zonas directas
         widgets = {
-            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la Actividad'}),
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Cimentación'}),
             'padre': forms.Select(attrs={'class': 'form-select'}),
-            'zonas': forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled mb-0'}),
-            'fecha_inicio_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_fin_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'proyecto': forms.HiddenInput(),
         }
 
     def __init__(self, *args, **kwargs):
-        proyecto = kwargs.pop('proyecto', None)
+        proyecto = kwargs.pop('proyecto_id', None)
         super().__init__(*args, **kwargs)
-
         if proyecto:
-            self.fields['padre'].queryset = Cronograma.objects.filter(
-                proyecto=proyecto
-            ).filter(
-                Q(padre__isnull=True) | Q(padre__padre__isnull=True)
-            ).order_by('padre__nombre', 'nombre')
-            
-            self.fields['padre'].label_from_instance = lambda obj: f"{'📂 ' + obj.nombre if obj.padre is None else '↳ ' + obj.nombre}"
-            self.fields['padre'].empty_label = "--- Sin Padre (Crear Nivel 1) ---"
+            self.fields['proyecto'].initial = proyecto
+            self.fields['padre'].queryset = Cronograma.objects.filter(proyecto_id=proyecto)
+
+
+class CronogramaPorZonaForm(forms.ModelForm):
+    """
+    Formulario para EDITAR las fechas de una actividad EN UNA ZONA ESPECÍFICA.
+    Sustituye al antiguo CronogramaHibridoForm para la edición de fechas.
+    """
+    class Meta:
+        model = CronogramaPorZona
+        fields = ['fecha_inicio_prog', 'fecha_fin_prog', 'fecha_inicio_real', 'fecha_fin_real']
+        widgets = {
+            'fecha_inicio_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_fin_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_inicio_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'fecha_fin_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+        }
 
 # --- NUEVO FORMULARIO PARA OBSERVACIONES ---
 class ObservacionForm(forms.ModelForm):

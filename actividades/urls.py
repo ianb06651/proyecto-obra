@@ -3,6 +3,8 @@
 from django.urls import path
 from . import views
 
+app_name = 'actividades'  
+
 urlpatterns = [
     # --- URL para la página principal ---
     path('', views.pagina_principal, name='pagina_principal'),
@@ -16,7 +18,7 @@ urlpatterns = [
     path('personal/reporte/nuevo/', views.registrar_reporte_personal, name='registrar_reporte_personal'),
     path('clima/', views.vista_clima, name='vista_clima'),
     
-    # --- URLS PARA GESTIONAR LA JERARQUÍA (WBS) ---
+    # --- URLS PARA GESTIONAR LA JERARQUÍA (WBS - Legacy/General) ---
     path('wbs/', views.ActividadListView.as_view(), name='actividad_list'),
     path('wbs/crear/', views.ActividadCreateView.as_view(), name='actividad_create'),
     path('wbs/<int:pk>/editar/', views.ActividadUpdateView.as_view(), name='actividad_update'),
@@ -41,10 +43,13 @@ urlpatterns = [
     
     path('api/generar-rango/', views.api_generar_rango, name='api_generar_rango'),
     
-    # --- URLs CRONOGRAMA ---
-    path('cronograma/', views.vista_cronograma, name='vista_cronograma'),
-    path('cronograma/nuevo/', views.crear_tarea_cronograma, name='crear_tarea_cronograma'), 
-    path('cronograma/editar/<int:pk>/', views.editar_fechas_cronograma, name='editar_fechas_cronograma'),
+    # --- URLs CRONOGRAMA (NUEVO SISTEMA POR ZONA) ---
+    path('cronograma/', views.vista_cronograma, name='cronograma_list'), # Cambié el nombre para ser consistente con views
+    path('cronograma/nuevo/', views.crear_tarea_cronograma, name='crear_tarea'), 
+    
+    # IMPORTANTE: Ahora el PK es del CronogramaPorZona, no de la tarea global
+    path('cronograma/editar/<int:pk>/', views.editar_fechas_cronograma, name='editar_fechas'),
+    path('cronograma/eliminar/<int:pk>/', views.eliminar_tarea_cronograma, name='eliminar_tarea'),
     
     path('cronograma/movil/', views.vista_cronograma_movil, name='cronograma_movil'),
     

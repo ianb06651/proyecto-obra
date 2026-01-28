@@ -7,81 +7,97 @@
         <h1 class="display-5 fw-bold">Panel de Control de Obra</h1>
         <div class="col-lg-8 mx-auto">
             <p class="lead mb-4">
-                Bienvenido. Desde aquí puedes registrar reportes,
-                gestionar observaciones o consultar el cronograma del proyecto.
+                Bienvenido al sistema de gestión. 
+                {% if proyecto %}
+                    Proyecto activo: <strong>{{ proyecto.nombre }}</strong>
+                {% endif %}
             </p>
         </div>
     </div>
 
     <div class="container acciones-container">
-        <div class="row">
-            {# --- Tarjeta 1: Acciones Generales --- #}
-            <div class="col-md-4">
-                <div class="seccion-accion h-100">
-                    <h2>Acciones Diarias</h2>
-                    <p>
-                        Registro de avances, reportes y observaciones de campo.
-                    </p>
-                    <div class="d-grid gap-2">
-                        <a href="{% url 'registrar_avance' %}" class="btn btn-primary">Registrar Avance</a>
-                        
-                        {# --- NUEVO BOTÓN OBSERVACIÓN --- #}
-                        <a href="{% url 'crear_observacion' %}" class="btn btn-outline-danger fw-bold">
-                            <i class="bi bi-exclamation-circle"></i> Registrar Observación
-                        </a>
-                        {# --- FIN NUEVO BOTÓN --- #}
-
-                        <a href="{% url 'cronograma_movil' %}" class="btn btn-warning text-dark fw-bold">
-                            <i class="bi bi-calendar-week"></i> Actualizar Cronograma
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            {# --- Tarjeta 2: Gestión por Proyecto --- #}
-            <div class="col-md-4">
-                <div class="seccion-accion h-100">
-                    <h2>Gestión por Proyecto</h2>
-                    <p>
-                        Historial, WBS y Cronograma Maestro.
-                    </p>
-                    <div class="list-group">
-                        {% for proyecto in proyectos %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                <a href="{% url 'historial_avance' proyecto.pk %}" class="text-decoration-none text-dark fw-bold">
-                                    {{ proyecto.nombre }}
+        {% if proyecto %}
+            <div class="row">
+                {# --- Tarjeta 1: Acciones Diarias --- #}
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3 text-primary">
+                                <i class="bi bi-clipboard-check display-4"></i>
+                            </div>
+                            <h3 class="h4 mb-3">Acciones Diarias</h3>
+                            <p class="text-muted mb-4">Registro de avances físicos, reportes de maquinaria y observaciones de campo.</p>
+                            
+                            <div class="d-grid gap-2">
+                                <a href="{% url 'actividades:registrar_avance' %}" class="btn btn-primary">
+                                    Registrar Avance
                                 </a>
-                                <a href="{% url 'vista_cronograma' %}" class="btn btn-sm btn-success">
-                                    Ver Cronograma
+                                <a href="{% url 'actividades:crear_observacion' %}" class="btn btn-outline-danger fw-bold">
+                                    <i class="bi bi-exclamation-circle"></i> Registrar Observación
+                                </a>
+                                <a href="{% url 'actividades:cronograma_movil' %}" class="btn btn-warning text-dark fw-bold">
+                                    <i class="bi bi-phone"></i> Cronograma Móvil
                                 </a>
                             </div>
-                        {% empty %}
-                            <p class="text-muted p-3">No hay proyectos registrados.</p>
-                        {% endfor %}
-                    </div>
-                    
-                    {# Acceso a la lista completa de observaciones #}
-                    <div class="mt-3 d-grid">
-                        <a href="{% url 'lista_observaciones' %}" class="btn btn-light border">
-                            Ver Todas las Observaciones
-                        </a>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {# --- Tarjeta 3: Otros --- #}
-            <div class="col-md-4">
-                <div class="seccion-accion h-100">
-                    <h2>Herramientas</h2>
-                    <p>
-                        Utilidades adicionales y consultas externas.
-                    </p>
-                    <div class="d-grid gap-2">
-                         <a href="{% url 'registrar_avance_bim' %}" class="btn btn-secondary">Avance BIM</a>
-                        <a href="{% url 'vista_clima' %}" class="btn btn-info text-white">Ver Pronóstico del Clima</a>
+                {# --- Tarjeta 2: Gestión del Proyecto --- #}
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3 text-success">
+                                <i class="bi bi-bar-chart-line display-4"></i>
+                            </div>
+                            <h3 class="h4 mb-3">Gestión del Proyecto</h3>
+                            <p class="text-muted mb-4">Consulta el historial de rendimientos, WBS y cronograma maestro.</p>
+                            
+                            <div class="d-grid gap-2">
+                                <a href="{% url 'actividades:historial_avance' proyecto.pk %}" class="btn btn-outline-dark">
+                                    Ver Historial y Avance
+                                </a>
+                                <a href="{% url 'actividades:cronograma_list' %}" class="btn btn-success">
+                                    <i class="bi bi-calendar3"></i> Ver Cronograma
+                                </a>
+                                <a href="{% url 'actividades:lista_observaciones' %}" class="btn btn-light border">
+                                    Ver Todas las Observaciones
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# --- Tarjeta 3: Herramientas --- #}
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-body text-center p-4">
+                            <div class="mb-3 text-info">
+                                <i class="bi bi-tools display-4"></i>
+                            </div>
+                            <h3 class="h4 mb-3">Herramientas</h3>
+                            <p class="text-muted mb-4">Utilidades adicionales, modelos BIM y pronósticos.</p>
+                            
+                            <div class="d-grid gap-2">
+                                <a href="{% url 'actividades:registrar_avance_bim' %}" class="btn btn-secondary">
+                                    <i class="bi bi-box"></i> Avance BIM
+                                </a>
+                                <a href="{% url 'actividades:vista_clima' %}" class="btn btn-info text-white">
+                                    <i class="bi bi-cloud-sun"></i> Pronóstico del Clima
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        {% else %}
+            {# --- Estado Cero: No hay proyecto --- #}
+            <div class="alert alert-warning text-center" role="alert">
+                <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> No se encontró ningún proyecto</h4>
+                <p>Para comenzar, necesitas registrar el proyecto principal en la base de datos.</p>
+                <hr>
+                <p class="mb-0">Ve al panel de administración de Django (/admin) y crea un registro en "Proyectos".</p>
+            </div>
+        {% endif %}
     </div>
 {% endblock %}

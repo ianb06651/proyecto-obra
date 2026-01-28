@@ -5,7 +5,7 @@
 {% block content %}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Gestión de Actividades (WBS)</h1>
-        <a href="{% url 'actividad_create' %}" class="btn btn-primary">Añadir Nueva Categoría Raíz</a>
+        <a href="{% url 'actividades:actividad_create' %}" class="btn btn-primary">Añadir Nueva Categoría Raíz</a>
     </div>
 
     <p class="lead">
@@ -17,6 +17,7 @@
         <div class="card-body">
             <ul class="list-unstyled">
                 {% for actividad in actividades %}
+                    {# Nota: Asegúrate de revisar también este archivo parcial para corregir las URLs dentro de él #}
                     {% include "actividades/partials/actividad_recursiva.html" with node=actividad %}
                 {% empty %}
                     <li class="text-muted">No hay actividades o categorías registradas.</li>

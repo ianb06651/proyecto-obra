@@ -24,7 +24,7 @@
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">Sí, eliminar permanentemente</button>
             
-            <a href="{% url 'historial_avance' avance.actividad.proyecto.pk %}" class="btn btn-secondary">Cancelar</a>
+            <a href="{% url 'actividades:historial_avance' avance.actividad.proyecto.pk %}" class="btn btn-secondary">Cancelar</a>
         </form>
     </div>
 </div>

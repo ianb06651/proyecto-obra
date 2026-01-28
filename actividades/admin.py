@@ -8,7 +8,7 @@ from .models import (
     ReporteDiarioMaquinaria, ReporteClima, Proyecto,
     MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
     ElementoConstructivo, AvanceProcesoElemento,
-    ElementoBIM_GUID, Cronograma, Observacion
+    ElementoBIM_GUID, Cronograma, Observacion, CronogramaPorZona  # <--- Agregamos CronogramaPorZona
 )
 
 # --- Registros de Catálogos ---
@@ -36,6 +36,12 @@ class MetaPorZonaInline(admin.TabularInline):
 
 class AvancePorZonaInline(admin.TabularInline):
     model = AvancePorZona
+    extra = 1
+    autocomplete_fields = ['zona']
+
+# --- NUEVO INLINE: Ver fechas por zona dentro de la Tarea Maestra ---
+class CronogramaPorZonaInline(admin.TabularInline):
+    model = CronogramaPorZona
     extra = 1
     autocomplete_fields = ['zona']
 
@@ -142,28 +148,33 @@ class ElementoBIM_GUID_Admin(admin.ModelAdmin):
     search_fields = ('identificador_bim', 'elemento_constructivo__identificador_unico')
     autocomplete_fields = ['elemento_constructivo']
     
+# --- CRONOGRAMA ACTUALIZADO ---
+
 @admin.register(Cronograma)
 class CronogramaAdmin(admin.ModelAdmin):
-    # Mostramos columnas útiles para identificar la jerarquía
-    list_display = ('nombre', 'padre', 'proyecto', 'fecha_inicio_prog', 'fecha_fin_prog')
+    # Ya no mostramos fechas aquí porque no existen en este modelo
+    list_display = ('nombre', 'padre', 'proyecto')
     
-    # Filtros laterales para navegar rápido por la estructura
-    list_filter = ('proyecto', 'padre', 'zonas') # <--- Añadido filtro por zonas
+    # Filtros laterales
+    list_filter = ('proyecto', 'padre') 
     
-    # Buscador para encontrar tareas rápido
+    # Buscador
     search_fields = ('nombre',)
     
-    # Ordenar por jerarquía y fecha
-    ordering = ('padre', 'fecha_inicio_prog')
+    # Ordenar por jerarquía
+    ordering = ('padre',)
     
-    # Esto permite seleccionar el padre usando un buscador en lugar de un dropdown gigante
     autocomplete_fields = ['padre'] 
     
-    # Selector horizontal para las zonas (Mucho más cómodo)
-    filter_horizontal = ('zonas',) 
-    
-    # Opcional: Para edición masiva rápida de fechas desde la lista
-    list_editable = ('fecha_inicio_prog', 'fecha_fin_prog')    
+    # Mostramos las zonas asociadas y sus fechas como una tabla interna
+    inlines = [CronogramaPorZonaInline]
+
+@admin.register(CronogramaPorZona)
+class CronogramaPorZonaAdmin(admin.ModelAdmin):
+    list_display = ('tarea', 'zona', 'fecha_inicio_prog', 'fecha_fin_prog', 'estado_calculado')
+    list_filter = ('zona', 'tarea__proyecto')
+    search_fields = ('tarea__nombre', 'zona__nombre')
+    list_editable = ('fecha_inicio_prog', 'fecha_fin_prog') # Permite editar fechas rápido desde el listado
 
 @admin.register(Observacion)
 class ObservacionAdmin(admin.ModelAdmin):

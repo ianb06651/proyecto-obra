@@ -1,77 +1,67 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
+{% load static %}
 
-{% block title %}Nueva Actividad{% endblock %}
+{% block title %}Nueva Actividad Maestra{% endblock %}
 
 {% block content %}
-<div class="card col-12 col-md-8 col-lg-6 mx-auto mt-4 shadow">
-    <div class="card-header bg-success text-white">
-        <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Crear Nueva Actividad</h5>
-    </div>
-    <div class="card-body">
-        <p class="text-muted small">Agrega una nueva tarea al cronograma de <strong>{{ proyecto.nombre }}</strong>.</p>
-        
-        <form method="post">
-            {% csrf_token %}
-            
-            {# 1. NOMBRE #}
-            <div class="mb-3">
-                <label class="form-label fw-bold">Nombre de la Actividad / Zona</label>
-                {{ form.nombre }}
-                {% if form.nombre.errors %}<div class="text-danger small">{{ form.nombre.errors.0 }}</div>{% endif %}
+<div class="container mt-5" style="max-width: 700px;">
+    <div class="card shadow border-0">
+        <div class="card-header bg-primary text-white py-3">
+            <h5 class="mb-0"><i class="bi bi-plus-circle-dotted me-2"></i>Nueva Actividad Maestra</h5>
+        </div>
+        <div class="card-body p-4">
+            <div class="alert alert-info small mb-4">
+                <i class="bi bi-info-circle-fill me-1"></i>
+                Esta actividad se creará en el catálogo global y se asignará automáticamente a las zonas que marques abajo.
             </div>
 
-            {# 2. ZONAS (NUEVO BLOQUE) #}
-            <div class="mb-3">
-                <label class="form-label fw-bold">Asignar Zonas (Opcional)</label>
-                <div class="card p-2 bg-light" style="max-height: 200px; overflow-y: auto;">
-                    {{ form.zonas }}
+            <form method="post">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="{{ form.nombre.id_for_label }}" class="form-label fw-bold text-secondary">Nombre de la Actividad</label>
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}
+                        <div class="text-danger small mt-1">{{ form.nombre.errors|first }}</div>
+                    {% endif %}
                 </div>
-                <div class="form-text small">Selecciona las zonas donde se ejecutará esta actividad.</div>
-            </div>
 
-            {# 3. PADRE #}
-            <div class="mb-3">
-                <label class="form-label fw-bold">Categoría Padre (Opcional)</label>
-                {{ form.padre }}
-                <div class="form-text small">
-                    Selecciona una categoría para agrupar esta actividad. <br>
-                    <strong>Déjalo vacío</strong> si esta ES una categoría nueva (Nivel 1).
+                <div class="mb-4">
+                    <label for="{{ form.padre.id_for_label }}" class="form-label fw-bold text-secondary">Categoría Padre (Opcional)</label>
+                    {{ form.padre }}
+                    <div class="form-text small">Déjalo vacío si es una actividad principal.</div>
                 </div>
-            </div>
 
-            {# 4. FECHAS #}
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-bold">Inicio Programado</label>
-                    {{ form.fecha_inicio_prog }}
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label small fw-bold">Fin Programado</label>
-                    {{ form.fecha_fin_prog }}
-                </div>
-            </div>
+                <hr class="text-muted">
 
-            <hr>
-            <div class="d-flex justify-content-end gap-2">
-                <a href="{% url 'vista_cronograma' %}" class="btn btn-secondary">Cancelar</a>
-                <button type="submit" class="btn btn-success">Guardar Actividad</button>
-            </div>
-        </form>
+                <div class="mb-4">
+                    <label class="form-label fw-bold text-primary mb-3">¿En qué zonas se realizará?</label>
+                    <div class="card bg-light border-0">
+                        <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                            {% for checkbox in form.zonas_aplicables %}
+                                <div class="form-check mb-2">
+                                    {{ checkbox.tag }}
+                                    <label class="form-check-label" for="{{ checkbox.id_for_label }}">
+                                        {{ checkbox.choice_label }}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                            
+                            {% if form.zonas_aplicables.errors %}
+                                <div class="text-danger small mt-2">{{ form.zonas_aplicables.errors|first }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a href="{% url 'actividades:cronograma_list' %}" class="btn btn-light border">Cancelar</a>
+                    <button type="submit" class="btn btn-success px-4">
+                        <i class="bi bi-save me-1"></i> Crear Actividad
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
-
-<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Convierte el select normal en un buscador inteligente para el campo Padre
-        new TomSelect('select[name="padre"]', {
-            create: false,
-            sortField: {field: "text", direction: "asc"},
-            placeholder: "Escribe para buscar categoría...",
-            allowEmptyOption: true
-        });
-    });
-</script>
 {% endblock %}
