@@ -4,49 +4,19 @@
 
 {% block content %}
 
-{# --- INICIO CSS NUEVO (Estilos para el buscador móvil) --- #}
 <style>
-    /* Forzar que el buscador ocupe todo el ancho disponible */
-    .ts-wrapper {
-        width: 100% !important;
-        display: block !important;
-    }
-    
-    /* Hacer la caja de escritura más alta y cómoda para el dedo */
-    .ts-control {
-        padding: 12px 15px !important; /* Más espacio interno */
-        min-height: 50px !important;   /* Altura mínima */
-        font-size: 1.1rem !important;  /* Letra un poco más grande */
-        border-radius: 8px !important;
-    }
-
-    /* Asegurar que el área de escritura sea amplia */
-    .ts-control input {
-        min-width: 200px !important; 
-        width: 100% !important;
-    }
-    
-    /* Mejorar el menú desplegable de resultados */
-    .ts-dropdown {
-        font-size: 1rem !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
-        margin-top: 5px !important;
-    }
-    
-    /* Ajuste para los items dentro de la lista */
-    .ts-dropdown .option {
-        padding: 10px 15px !important;
-    }
+    .ts-wrapper { width: 100% !important; display: block !important; }
+    .ts-control { padding: 12px 15px !important; min-height: 50px !important; font-size: 1.1rem !important; border-radius: 8px !important; }
+    .ts-control input { min-width: 200px !important; width: 100% !important; }
+    .ts-dropdown { font-size: 1rem !important; border-radius: 8px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important; margin-top: 5px !important; }
+    .ts-dropdown .option { padding: 10px 15px !important; }
 </style>
-{# --- FIN CSS NUEVO --- #}
 
 <div class="container mt-2">
     
-    {# Encabezado simple #}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0 text-primary">Actualizar Avance</h4>
-        <a href="{% url 'vista_cronograma' %}" class="btn btn-outline-secondary btn-sm">
+        <a href="{% url 'actividades:cronograma_list' %}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-table"></i> Ver Tabla
         </a>
     </div>
@@ -54,13 +24,23 @@
     <div class="card shadow-sm border-0">
         <div class="card-body bg-white">
             
-            <p class="text-muted small mb-3">Selecciona la zona y actividad para habilitar la edición.</p>
+            <p class="text-muted small mb-3">Sigue los pasos para encontrar la actividad:</p>
 
-            {# --- FILTROS EN CASCADA --- #}
-            
-            {# 1. NIVEL 1: Categoría Principal #}
+            {# PASO 0: SELECCIONAR ZONA (NUEVO) #}
+            <div class="mb-3 p-3 bg-light rounded border">
+                <label class="form-label fw-bold text-primary small text-uppercase">1. Selecciona la Zona de Trabajo</label>
+                <select id="select-zona" class="form-select form-select-lg fw-bold text-primary">
+                    {% for zona in zonas %}
+                        <option value="{{ zona.id }}">{{ zona.nombre }}</option>
+                    {% empty %}
+                        <option value="">No hay zonas creadas</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# PASO 1: Categoría #}
             <div class="mb-3">
-                <label class="form-label fw-bold small text-uppercase text-muted">1. Categoría General</label>
+                <label class="form-label fw-bold small text-uppercase text-muted">2. Categoría General</label>
                 <select id="select-nivel-1" class="form-select form-select-lg">
                     <option value="">-- Selecciona --</option>
                     {% for cat in categorias_nivel_1 %}
@@ -69,17 +49,17 @@
                 </select>
             </div>
 
-            {# 2. NIVEL 2: Zona (Se carga vía JS) #}
+            {# PASO 2: Sub-Categoría #}
             <div class="mb-3" id="container-nivel-2" style="display:none;">
-                <label class="form-label fw-bold small text-uppercase text-muted">2. Zona / Sub-Categoría</label>
+                <label class="form-label fw-bold small text-uppercase text-muted">3. Sub-Categoría</label>
                 <select id="select-nivel-2" class="form-select form-select-lg" disabled>
                     <option value="">-- Primero selecciona Categoría --</option>
                 </select>
             </div>
 
-            {# 3. NIVEL 3: Actividad Final (Se carga vía JS y usa Buscador) #}
+            {# PASO 3: Actividad Final #}
             <div class="mb-4" id="container-nivel-3" style="display:none;">
-                <label class="form-label fw-bold small text-uppercase text-muted">3. Actividad Final</label>
+                <label class="form-label fw-bold small text-uppercase text-muted">4. Actividad Final</label>
                 <select id="select-nivel-3" placeholder="Buscar actividad..." autocomplete="off">
                     <option value="">Buscar actividad...</option>
                 </select>
@@ -87,27 +67,34 @@
 
             <hr class="my-4">
 
-            {# --- FORMULARIO DE EDICIÓN (Se muestra al final) --- #}
+            {# FORMULARIO DE EDICIÓN #}
             <form method="post" id="form-edicion" style="display:none;">
                 {% csrf_token %}
                 <input type="hidden" name="tarea_id" id="input-tarea-id">
+                <input type="hidden" name="zona_id" id="input-zona-id"> {# CAMPO OCULTO IMPORTANTE #}
 
-                <h5 class="text-primary mb-3" id="titulo-tarea-seleccionada">Actividad</h5>
+                <div class="alert alert-info border-0 d-flex align-items-center">
+                    <i class="bi bi-pencil-fill me-2"></i>
+                    <div>
+                        <small class="d-block text-uppercase text-muted" style="font-size: 0.7rem;">Editando:</small>
+                        <strong id="titulo-tarea-seleccionada">Actividad</strong>
+                    </div>
+                </div>
 
                 <div class="row g-3">
                     <div class="col-6">
-                        <label class="form-label fw-bold">Inicio Real</label>
-                        <input type="date" name="fecha_inicio_real" id="input-inicio" class="form-control form-control-lg border-primary">
+                        <label class="form-label fw-bold small">Inicio Real</label>
+                        <input type="date" name="fecha_inicio_real" id="input-inicio" class="form-control form-control-lg border-primary shadow-sm">
                     </div>
                     <div class="col-6">
-                        <label class="form-label fw-bold">Fin Real</label>
-                        <input type="date" name="fecha_fin_real" id="input-fin" class="form-control form-control-lg border-success">
+                        <label class="form-label fw-bold small">Fin Real</label>
+                        <input type="date" name="fecha_fin_real" id="input-fin" class="form-control form-control-lg border-success shadow-sm">
                     </div>
                 </div>
 
                 <div class="d-grid mt-4">
                     <button type="submit" class="btn btn-primary btn-lg py-3 shadow">
-                        Guardar Cambios
+                        Guardar Avance
                     </button>
                 </div>
             </form>
@@ -120,109 +107,104 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     
+    const selZona = document.getElementById('select-zona'); // Nuevo
     const selNivel1 = document.getElementById('select-nivel-1');
     const selNivel2 = document.getElementById('select-nivel-2');
     const divNivel2 = document.getElementById('container-nivel-2');
-    
     const divNivel3 = document.getElementById('container-nivel-3');
     
-    // Inicializamos TomSelect vacío para el nivel 3
-    let tomSelectNivel3 = new TomSelect('#select-nivel-3', {
-        valueField: 'id',
-        labelField: 'nombre',
-        searchField: 'nombre',
-        create: false,
-        sortField: {field: "nombre", direction: "asc"},
-        placeholder: "Escribe para buscar..."
-    });
-
+    // Elementos del formulario
     const formEdicion = document.getElementById('form-edicion');
-    const inputId = document.getElementById('input-tarea-id');
+    const inputTareaId = document.getElementById('input-tarea-id');
+    const inputZonaId = document.getElementById('input-zona-id'); // Nuevo
     const tituloTarea = document.getElementById('titulo-tarea-seleccionada');
     const inputInicio = document.getElementById('input-inicio');
     const inputFin = document.getElementById('input-fin');
 
-    // --- PASO 1: Cambio en Nivel 1 ---
+    let tomSelectNivel3 = new TomSelect('#select-nivel-3', {
+        valueField: 'id', labelField: 'nombre', searchField: 'nombre', create: false,
+        sortField: {field: "nombre", direction: "asc"}, placeholder: "Escribe para buscar..."
+    });
+
+    // Resetear formulario si cambia algo importante
+    function resetForm() {
+        formEdicion.style.display = 'none';
+        tomSelectNivel3.clear();
+    }
+
+    // Al cambiar zona, reseteamos la selección final para obligar a recargar datos
+    selZona.addEventListener('change', resetForm);
+
     selNivel1.addEventListener('change', function() {
         const padreId = this.value;
+        resetForm();
         
-        // Resetear siguientes pasos
         selNivel2.innerHTML = '<option value="">Cargando...</option>';
         selNivel2.disabled = true;
         divNivel2.style.display = 'block';
         divNivel3.style.display = 'none';
-        formEdicion.style.display = 'none';
-        tomSelectNivel3.clear();
+        
         tomSelectNivel3.clearOptions();
 
         if (padreId) {
-            // CORRECCIÓN AQUÍ: Quitamos "/actividades" de la URL
             fetch(`/api/cronograma/hijos/${padreId}/`)
-                .then(res => {
-                    if (!res.ok) throw new Error("Error en la red");
-                    return res.json();
-                })
+                .then(res => res.json())
                 .then(data => {
-                    selNivel2.innerHTML = '<option value="">-- Selecciona Zona --</option>';
-                    if(data.length === 0) {
-                        selNivel2.innerHTML = '<option value="">(Sin sub-categorías)</option>';
-                    }
-                    data.forEach(item => {
-                        selNivel2.innerHTML += `<option value="${item.id}">${item.nombre}</option>`;
-                    });
+                    selNivel2.innerHTML = '<option value="">-- Selecciona Sub-Categoría --</option>';
+                    if(data.length === 0) selNivel2.innerHTML = '<option value="">(Sin sub-categorías)</option>';
+                    data.forEach(item => selNivel2.innerHTML += `<option value="${item.id}">${item.nombre}</option>`);
                     selNivel2.disabled = false;
-                })
-                .catch(error => {
-                    console.error("Error cargando hijos:", error);
-                    selNivel2.innerHTML = '<option value="">Error al cargar</option>';
                 });
         }
     });
 
-    // --- PASO 2: Cambio en Nivel 2 ---
     selNivel2.addEventListener('change', function() {
         const padreId = this.value;
-
+        resetForm();
         divNivel3.style.display = 'none';
-        formEdicion.style.display = 'none';
-        tomSelectNivel3.clear();
         tomSelectNivel3.clearOptions();
 
         if (padreId) {
             divNivel3.style.display = 'block';
-            // CORRECCIÓN AQUÍ: Quitamos "/actividades" de la URL
             fetch(`/api/cronograma/hijos/${padreId}/`)
                 .then(res => res.json())
-                .then(data => {
-                    data.forEach(item => {
-                        tomSelectNivel3.addOption(item);
-                    });
-                })
-                .catch(error => console.error("Error cargando actividades:", error));
+                .then(data => { data.forEach(item => tomSelectNivel3.addOption(item)); });
         }
     });
 
-    // --- PASO 3: Selección Final (Nivel 3) ---
+    // CUANDO SE SELECCIONA LA ACTIVIDAD FINAL
     tomSelectNivel3.on('change', function(tareaId) {
-        if (tareaId) {
-            // CORRECCIÓN AQUÍ: Quitamos "/actividades" de la URL
-            fetch(`/api/cronograma/detalle/${tareaId}/`)
+        const zonaId = selZona.value; // Obtenemos la zona seleccionada arriba
+
+        if (tareaId && zonaId) {
+            // Llamamos a la API enviando Tarea Y Zona
+            fetch(`/api/cronograma/detalle/${tareaId}/?zona_id=${zonaId}`)
                 .then(res => res.json())
                 .then(data => {
-                    inputId.value = data.id;
+                    // Llenamos los hidden inputs
+                    inputTareaId.value = data.id;
+                    inputZonaId.value = zonaId;
+                    
+                    // Texto y fechas
                     tituloTarea.innerText = data.nombre;
                     inputInicio.value = data.fecha_inicio_real || '';
                     inputFin.value = data.fecha_fin_real || '';
                     
+                    // Mostrar formulario
                     formEdicion.style.display = 'block';
                     formEdicion.scrollIntoView({ behavior: 'smooth' });
                 })
-                .catch(error => console.error("Error cargando detalle:", error));
+                .catch(error => {
+                    console.error(error);
+                    alert("Error al cargar los datos de esta actividad en la zona seleccionada.");
+                });
+        } else if (tareaId && !zonaId) {
+            alert("⚠️ Por favor, selecciona una Zona de Trabajo en la parte superior (Paso 1).");
+            tomSelectNivel3.clear(); // Limpiar selección para obligar a corregir
         } else {
             formEdicion.style.display = 'none';
         }
     });
-
 });
 </script>
 {% endblock %}

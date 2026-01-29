@@ -6,7 +6,6 @@
 <div class="container mt-4">
     <div class="card w-75 mx-auto">
         <div class="card-header">
-            {# Título más específico usando el objeto avance #}
             <h1>Editar Avance del {{ avance.fecha_reporte|date:"d M Y" }}</h1>
             <h2>Actividad: {{ avance.actividad }}</h2>
         </div>
@@ -14,16 +13,13 @@
             <form method="post">
                 {% csrf_token %}
 
-                {# Mostrar errores generales del formulario principal si existen #}
                 {% if form.non_field_errors %}
                     <div class="alert alert-danger">{{ form.non_field_errors|first }}</div>
                 {% endif %}
-                {# Mostrar errores generales del formset si existen #}
                 {% if formset.non_form_errors %}
                     <div class="alert alert-danger">{{ formset.non_form_errors|first }}</div>
                 {% endif %}
 
-                {# Campos principales del AvanceDiario (Fecha, Actividad, Empresa) #}
                 <div class="mb-3">
                     <label for="{{ form.fecha_reporte.id_for_label }}" class="form-label">Fecha de Reporte</label>
                     {{ form.fecha_reporte }}
@@ -42,8 +38,6 @@
                     {% if form.empresa.errors %}<div class="text-danger small mt-1">{{ form.empresa.errors|first }}</div>{% endif %}
                 </div>
 
-                {# --- MODIFICADO: Se elimina el bloque {% if %} y {% else %} --- #}
-                {# Ahora siempre se muestra el desglose por zona #}
                 <h5 class="mt-4">Editar Desglose por Zona</h5>
                 {{ formset.management_form }}
                 <table class="table table-bordered">
@@ -51,14 +45,14 @@
                         <tr>
                             <th>Zona</th>
                             <th>Cantidad</th>
-                            <th>Eliminar</th> {# Mantener columna Eliminar #}
+                            <th>Eliminar</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for subform in formset %}
                             <tr>
                                 <td>
-                                    {{ subform.id }} {# Campo oculto ID #}
+                                    {{ subform.id }}
                                     {{ subform.zona }}
                                     {% if subform.zona.errors %}<div class="text-danger small mt-1">{{ subform.zona.errors|first }}</div>{% endif %}
                                 </td>
@@ -67,19 +61,17 @@
                                     {% if subform.cantidad.errors %}<div class="text-danger small mt-1">{{ subform.cantidad.errors|first }}</div>{% endif %}
                                 </td>
                                 <td>
-                                     {# Mostrar checkbox DELETE si el formset lo permite y la instancia existe #}
                                     {% if formset.can_delete and subform.instance.pk %}{{ subform.DELETE }}{% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                {# --- FIN de la sección modificada --- #}
 
                 <hr>
                 <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-                {# Enlace de cancelar ahora usa el avance.actividad.proyecto.pk #}
-                <a href="{% url 'historial_avance' avance.actividad.proyecto.pk %}" class="btn btn-secondary">Cancelar</a>
+                {# CORRECCIÓN: Agregado 'actividades:' #}
+                <a href="{% url 'actividades:historial_avance' avance.actividad.proyecto.pk %}" class="btn btn-secondary">Cancelar</a>
             </form>
         </div>
     </div>

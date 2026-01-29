@@ -6,20 +6,18 @@
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Historial de Avance: {{ proyecto.nombre }}</h1>
-        <a href="{% url 'registrar_avance' %}" class="btn btn-success">Registrar Nuevo Avance Diario</a>
+        {# CORRECCIÓN: Agregado 'actividades:' #}
+        <a href="{% url 'actividades:registrar_avance' %}" class="btn btn-success">Registrar Nuevo Avance Diario</a>
     </div>
 
     <div class="row text-center mb-4">
         <div class="col-md-4 mb-3"><div class="card h-100"><div class="card-body"><h5 class="card-title">Avance Real (EV)</h5><p class="card-text fs-4 fw-bold">{{ total_real_ev|floatformat:2 }} {% if actividad_seleccionada %}<span>{{ actividad_seleccionada.unidad_medida }}</span>{% endif %}</p><small class="text-muted">Valor Ganado</small></div></div></div>
         <div class="col-md-4 mb-3"><div class="card h-100"><div class="card-body"><h5 class="card-title">Avance Programado (PV)</h5><p class="card-text fs-4 fw-bold">{{ total_programado_pv|floatformat:2 }} {% if actividad_seleccionada %}<span>{{ actividad_seleccionada.unidad_medida }}</span>{% endif %}</p><small class="text-muted">Valor Planeado al {{ fecha_corte|date:"d-M" }}</small></div></div></div>
         
-        {# --- ESTA ES LA TARJETA MODIFICADA --- #}
         <div class="col-md-4 mb-3">
             <div class="card h-100">
                 <div class="card-body">
                     <h5 class="card-title">Desempeño (SPI)</h5>
-                    {# 1. Se cambió la lógica para usar valores decimales (>= 1 y < 0.9) #}
-                    {# 2. Se eliminó el símbolo de porcentaje "%" del final #}
                     <p class="card-text fs-4 fw-bold {% if rendimiento_spi >= 1 %}text-success{% elif rendimiento_spi < 0.9 %}text-danger{% else %}text-warning{% endif %}">
                         {{ rendimiento_spi|floatformat:2 }}
                     </p>
@@ -34,7 +32,8 @@
             <form method="get" class="row gx-3 gy-2 align-items-center">
                 <div class="col-sm-5"><label for="id_semana">Filtrar por Semana:</label><select name="semana_filtro" id="id_semana" class="form-select" onchange="this.form.submit()"><option value="">-- Todas las Semanas --</option>{% for s in semanas %}<option value="{{ s.pk }}" {% if semana_seleccionada_id == s.pk|stringformat:"s" %}selected{% endif %}>Semana {{ s.numero_semana }} ({{ s.fecha_inicio|date:"d/m" }} al {{ s.fecha_fin|date:"d/m" }})</option>{% endfor %}</select></div>
                 <div class="col-sm-5"><label for="id_actividad">Filtrar por Actividad:</label><select name="actividad_filtro" id="id_actividad" class="form-select" onchange="this.form.submit()"><option value="">-- Todas las Actividades (Proyecto Total) --</option>{% for act in actividades_filtrables %}<option value="{{ act.pk }}" {% if actividad_seleccionada_id == act.pk|stringformat:"s" %}selected{% endif %}>{{ act }}</option>{% endfor %}</select></div>
-                <div class="col-sm-2 d-flex align-items-end"><a href="{% url 'historial_avance' proyecto.pk %}" class="btn btn-secondary w-100">Limpiar Filtros</a></div>
+                {# CORRECCIÓN: Agregado 'actividades:' #}
+                <div class="col-sm-2 d-flex align-items-end"><a href="{% url 'actividades:historial_avance' proyecto.pk %}" class="btn btn-secondary w-100">Limpiar Filtros</a></div>
             </form>
         </div>
     </div>
@@ -60,7 +59,6 @@
                         <td>{{ avance.cantidad_programada_dia|floatformat:2 }}</td>
                         <td>
                             <span class="fw-bold">{{ avance.cantidad_total|floatformat:2 }}</span>
-
                             {% if avance.avances_por_zona.all %}
                                 <button class="btn btn-sm btn-outline-info ms-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ avance.pk }}" aria-expanded="false" aria-controls="collapse-{{ avance.pk }}">
                                     Ver Zonas
@@ -70,8 +68,9 @@
                         <td>{{ avance.empresa.nombre|default:"N/A" }}</td>
                         <td>{{ avance.actividad.unidad_medida }}</td>
                         <td>
-                            <a href="{% url 'editar_avance' avance.pk %}" class="btn btn-sm btn-warning">Editar</a>
-                            <a href="{% url 'borrar_avance' avance.pk %}" class="btn btn-sm btn-danger">Borrar</a>
+                            {# CORRECCIÓN: Agregado 'actividades:' en editar y borrar #}
+                            <a href="{% url 'actividades:editar_avance' avance.pk %}" class="btn btn-sm btn-warning">Editar</a>
+                            <a href="{% url 'actividades:borrar_avance' avance.pk %}" class="btn btn-sm btn-danger">Borrar</a>
                         </td>
                     </tr>
                     {% if avance.avances_por_zona.all %}

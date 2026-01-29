@@ -12,7 +12,10 @@ from .models import (
     AreaDeTrabajo, Cronograma, Observacion, CronogramaPorZona
 )
 
-# --- Formularios sin cambios ---
+# ==========================================
+# REPORTES Y OTROS (Sin cambios)
+# ==========================================
+
 class ReporteMaquinariaForm(forms.ModelForm):
     class Meta:
         model = ReporteDiarioMaquinaria
@@ -31,7 +34,7 @@ class ReporteMaquinariaForm(forms.ModelForm):
             'cantidad_inactiva': forms.NumberInput(attrs={'class': 'form-control'}),
             'observaciones': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.instance.pk and 'fecha' in self.fields:
@@ -44,7 +47,7 @@ class ReportePersonalForm(forms.ModelForm):
         widgets = {
             'fecha': forms.DateInput(attrs={'type': 'date'}),
         }
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.instance.pk and 'fecha' in self.fields:
@@ -60,7 +63,9 @@ class ConsultaClimaForm(forms.Form):
         initial=date.today
     )
 
-# --- Formularios para el modelo Actividad ---
+# ==========================================
+# ACTIVIDADES (WBS)
+# ==========================================
 
 class MetaPorZonaForm(forms.ModelForm):
     class Meta:
@@ -114,11 +119,13 @@ class ActividadForm(forms.ModelForm):
                 descendientes_pks = list(self.instance.sub_actividades.values_list('pk', flat=True))
                 pks_a_excluir = [self.instance.pk] + descendientes_pks
                 queryset = queryset.exclude(pk__in=pks_a_excluir)
-
+            
             self.fields['padre'].queryset = queryset.order_by('padre__nombre', 'nombre')
             self.fields['padre'].empty_label = "--- Ninguna (Categoría Raíz) ---"
 
-# --- Formularios para el modelo AvanceDiario ---
+# ==========================================
+# AVANCE DIARIO
+# ==========================================
 
 class AvancePorZonaForm(forms.ModelForm):
     class Meta:
@@ -149,9 +156,8 @@ class AvanceDiarioForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         actividad_queryset = kwargs.pop('actividad_queryset', None)
         self.validate_uniqueness = kwargs.pop('validate_uniqueness', True) 
-        
         super().__init__(*args, **kwargs)
-
+        
         if not self.instance.pk and 'fecha_reporte' in self.fields:
             self.fields['fecha_reporte'].initial = date.today()
 
@@ -160,7 +166,7 @@ class AvanceDiarioForm(forms.ModelForm):
                 existing_classes = field.widget.attrs.get('class', '')
                 if 'form-control' not in existing_classes:
                      field.widget.attrs['class'] = f'{existing_classes} form-control'.strip()
-
+        
         if actividad_queryset is not None:
             self.fields['actividad'].queryset = actividad_queryset
         elif 'actividad' in self.fields:
@@ -169,8 +175,11 @@ class AvanceDiarioForm(forms.ModelForm):
     def validate_unique(self):
         if self.validate_uniqueness:
             super().validate_unique()
-        pass
-             
+
+# ==========================================
+# BIM
+# ==========================================
+
 class SeleccionarElementoForm(forms.Form):
     elemento = forms.ModelChoiceField(
         queryset=ElementoConstructivo.objects.all(),
@@ -184,44 +193,52 @@ class AvanceProcesoElementoForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'})
     )
-
     class Meta:
         model = AvanceProcesoElemento
         fields = ['paso_proceso', 'fecha_finalizacion']
         widgets = {'paso_proceso': forms.HiddenInput()}
-        
-# actividades/forms.py (Actualización parcial)
+
+# ==========================================
+# CRONOGRAMA (CORREGIDO)
+# ==========================================
 
 class CronogramaForm(forms.ModelForm):
     """
     Formulario para CREAR una nueva actividad MAESTRA.
-    Preguntamos el nombre y las zonas donde aplicará.
     """
-    # Agregamos un campo extra que no está en el modelo Cronograma, 
-    # sino que usaremos para crear los hijos en CronogramaPorZona.
+    # Campo manual para seleccionar múltiples zonas al crear
     zonas_aplicables = forms.ModelMultipleChoiceField(
         queryset=AreaDeTrabajo.objects.all(),
-        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled mb-0'}),
         required=True,
-        label="Zonas donde aplica esta actividad"
+        label="Zonas donde aplica"
     )
 
     class Meta:
         model = Cronograma
-        fields = ['nombre', 'padre', 'proyecto'] # Quitamos fechas y zonas directas
+        fields = ['nombre', 'padre', 'proyecto'] # Solo campos reales de Cronograma
         widgets = {
-            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Cimentación'}),
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la Actividad'}),
             'padre': forms.Select(attrs={'class': 'form-select'}),
             'proyecto': forms.HiddenInput(),
         }
 
     def __init__(self, *args, **kwargs):
-        proyecto = kwargs.pop('proyecto_id', None)
+        proyecto = kwargs.pop('proyecto', None)
         super().__init__(*args, **kwargs)
+        
         if proyecto:
             self.fields['proyecto'].initial = proyecto
-            self.fields['padre'].queryset = Cronograma.objects.filter(proyecto_id=proyecto)
+            self.fields['padre'].queryset = Cronograma.objects.filter(
+                proyecto=proyecto
+            ).filter(
+                Q(padre__isnull=True) | Q(padre__padre__isnull=True)
+            ).order_by('padre__nombre', 'nombre')
+            
+            self.fields['padre'].label_from_instance = lambda obj: f"{'📂 ' + obj.nombre if obj.padre is None else '↳ ' + obj.nombre}"
+            self.fields['padre'].empty_label = "--- Sin Padre (Crear Nivel 1) ---"
 
+# En actividades/forms.py
 
 class CronogramaPorZonaForm(forms.ModelForm):
     """
@@ -232,26 +249,41 @@ class CronogramaPorZonaForm(forms.ModelForm):
         model = CronogramaPorZona
         fields = ['fecha_inicio_prog', 'fecha_fin_prog', 'fecha_inicio_real', 'fecha_fin_real']
         widgets = {
-            'fecha_inicio_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_fin_prog': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_inicio_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'fecha_fin_real': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            # IMPORTANTE: format='%Y-%m-%d' es vital para que Chrome/Firefox muestren la fecha
+            'fecha_inicio_prog': forms.DateInput(
+                format='%Y-%m-%d',
+                attrs={'type': 'date', 'class': 'form-control'}
+            ),
+            'fecha_fin_prog': forms.DateInput(
+                format='%Y-%m-%d',
+                attrs={'type': 'date', 'class': 'form-control'}
+            ),
+            'fecha_inicio_real': forms.DateInput(
+                format='%Y-%m-%d',
+                attrs={'type': 'date', 'class': 'form-control border-primary'}
+            ),
+            'fecha_fin_real': forms.DateInput(
+                format='%Y-%m-%d',
+                attrs={'type': 'date', 'class': 'form-control border-primary'}
+            ),
         }
 
-# --- NUEVO FORMULARIO PARA OBSERVACIONES ---
+# ==========================================
+# OBSERVACIONES
+# ==========================================
+
 class ObservacionForm(forms.ModelForm):
     class Meta:
         model = Observacion
-        fields = ['fecha', 'zona', 'nombre', 'comentario', 'imagen'] # <--- Agregamos 'imagen'
+        fields = ['fecha', 'zona', 'nombre', 'comentario', 'imagen']
         widgets = {
             'fecha': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'zona': forms.Select(attrs={'class': 'form-select'}),
-            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Título de la observación'}),
-            'comentario': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Detalles...'}),
-            # El widget de imagen ya es automático, pero podemos añadirle clase si queremos
-            'imagen': forms.ClearableFileInput(attrs={'class': 'form-control'}), 
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Título'}),
+            'comentario': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'imagen': forms.ClearableFileInput(attrs={'class': 'form-control'}),
         }
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not self.instance.pk and 'fecha' in self.fields:

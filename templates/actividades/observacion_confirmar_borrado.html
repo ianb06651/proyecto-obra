@@ -19,7 +19,7 @@
         
         <form method="post" class="mt-4 d-flex justify-content-center gap-3">
             {% csrf_token %}
-            <a href="{% url 'lista_observaciones' %}" class="btn btn-secondary px-4">Cancelar</a>
+            <a href="{% url 'actividades:lista_observaciones' %}" class="btn btn-secondary px-4">Cancelar</a>
             <button type="submit" class="btn btn-danger px-4">Sí, eliminar</button>
         </form>
     </div>

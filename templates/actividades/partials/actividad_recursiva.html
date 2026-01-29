@@ -7,8 +7,9 @@
             {% endif %}
         </span>
         <span class="ms-4">
-            <a href="{% url 'actividad_update' node.pk %}" class="btn btn-sm btn-secondary">Editar</a>
-            <a href="{% url 'actividad_create' %}?padre={{ node.pk }}" class="btn btn-sm btn-info">Añadir Sub-actividad</a>
+            {# CORRECCIÓN: Agregado el prefijo 'actividades:' #}
+            <a href="{% url 'actividades:actividad_update' node.pk %}" class="btn btn-sm btn-secondary">Editar</a>
+            <a href="{% url 'actividades:actividad_create' %}?padre={{ node.pk }}" class="btn btn-sm btn-info">Añadir Sub-actividad</a>
         </span>
     </div>
 

@@ -140,9 +140,9 @@
 
 <script>
     // URLS GLOBALES
-    const URL_BUSCAR = '{{ url_buscar_elementos }}';
-    const URL_PASOS_BASE = '{{ url_obtener_pasos_base }}'; // /api/elemento/0/pasos/
-    const URL_API_RANGO = '{% url "api_generar_rango" %}';
+    const URL_BUSCAR = '{% url "actividades:api_buscar_elementos" %}';
+    const URL_PASOS_BASE = '{% url "actividades:api_obtener_pasos" 0 %}'; // /api/elemento/0/pasos/
+    const URL_API_RANGO = '{% url "actividades:api_generar_rango" %}';
 
     // ==========================================
     // LÓGICA COMÚN

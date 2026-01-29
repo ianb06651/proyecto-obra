@@ -6,10 +6,11 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Registrar Avance para: {{ proyecto.nombre }}</h2>
-        <a href="{% url 'historial_avance' proyecto.pk %}" class="btn btn-secondary">Volver al Historial</a>
+        {# CORRECCIÓN: Agregado 'actividades:' #}
+        <a href="{% url 'actividades:historial_avance' proyecto.pk %}" class="btn btn-secondary">Volver al Historial</a>
     </div>
 
-    <p>Usa este formulario para registrar el avance diario de las actividades, desglosado por zona de trabajo.</p> {# Mensaje actualizado #}
+    <p>Usa este formulario para registrar el avance diario de las actividades, desglosado por zona de trabajo.</p>
     <hr>
 
     {% if messages %}
@@ -26,7 +27,7 @@
         </div>
         <div class="card-body">
             <form method="get" id="partidaFilterForm">
-                <div class="form-group mb-0"> {# Añadido mb-0 para consistencia si solo hay un campo #}
+                <div class="form-group mb-0">
                     <label for="partida_filtro_id">Filtrar por Partida:</label>
                     <select name="partida_filtro" id="partida_filtro_id" class="form-select" onchange="this.form.submit();">
                         <option value="">--- Ver todas las actividades ---</option>
@@ -43,13 +44,12 @@
 
     <div class="card">
         <div class="card-header">
-            <strong>Registrar Avance Diario por Zona</strong> {# Título actualizado #}
+            <strong>Registrar Avance Diario por Zona</strong>
         </div>
         <div class="card-body">
             <form method="post">
                 {% csrf_token %}
 
-                {# Campos principales del AvanceDiarioForm #}
                 <div class="mb-3">
                     <label for="{{ form.fecha_reporte.id_for_label }}" class="form-label">{{ form.fecha_reporte.label }}</label>
                     {{ form.fecha_reporte }}
@@ -69,14 +69,7 @@
                     <small class="form-text text-muted">La lista de actividades depende del filtro de partida que elijas arriba.</small>
                 </div>
 
-                {# ELIMINADO: Sección de Radio Buttons tipo_registro #}
-                {# <div class="mb-3"> ... radio buttons ... </div> #}
-
-                {# ELIMINADO: Contenedor para cantidad_general #}
-                {# <div id="general-container" class="mb-3"> ... </div> #}
-
-                {# MODIFICADO: Contenedor del FormSet de Zonas - Ahora siempre visible #}
-                <div id="zonas-container" class="mb-3"> {# Se eliminó style="display: none;" #}
+                <div id="zonas-container" class="mb-3">
                     <h5 class="mt-4">Desglose por Zona</h5>
                     {{ formset.management_form }}
                     {% if formset.non_form_errors %}
@@ -88,14 +81,14 @@
                             <tr>
                                 <th style="width: 50%;">Zona</th>
                                 <th style="width: 40%;">Cantidad</th>
-                                <th>Elim.</th> {# Mantener columna Eliminar #}
+                                <th>Elim.</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for subform in formset %}
-                                <tr class="dynamic-formset-row"> {# Añadir clase para JS si se usa para añadir/quitar filas #}
+                                <tr class="dynamic-formset-row">
                                     <td>
-                                        {{ subform.id }} {# Campo oculto ID es importante #}
+                                        {{ subform.id }}
                                         {{ subform.zona }}
                                         {% if subform.zona.errors %}<div class="invalid-feedback d-block">{{ subform.zona.errors|first }}</div>{% endif %}
                                     </td>
@@ -104,14 +97,12 @@
                                         {% if subform.cantidad.errors %}<div class="invalid-feedback d-block">{{ subform.cantidad.errors|first }}</div>{% endif %}
                                     </td>
                                     <td>
-                                        {# Mostrar checkbox DELETE si el formset lo permite y la instancia existe #}
                                         {% if formset.can_delete and subform.instance.pk %}{{ subform.DELETE }}{% endif %}
                                     </td>
                                 </tr>
                             {% endfor %}
                         </tbody>
                     </table>
-                     {# Opcional: Añadir botón "Añadir Zona" si se implementa JS para formsets dinámicos #}
                 </div>
 
                 <button type="submit" class="btn btn-primary">Guardar Avance</button>
