@@ -529,6 +529,12 @@ class Observacion(models.Model):
     Registra observaciones diarias en una zona específica, con soporte para
     marcar cumplimiento (check) por un usuario y evidencia fotográfica.
     """
+    ESTADOS = [
+        ('pendiente', '🔴 No Iniciado'),
+        ('proceso', '🟡 En Progreso'),
+        ('resuelto', '🟢 Resuelto'),
+    ]
+
     fecha = models.DateField(default=date.today, verbose_name="Fecha de Observación")
     zona = models.ForeignKey(AreaDeTrabajo, on_delete=models.PROTECT, verbose_name="Zona")
     nombre = models.CharField(max_length=255, verbose_name="Nombre / Título de la Observación")
@@ -541,16 +547,23 @@ class Observacion(models.Model):
         verbose_name="Evidencia Fotográfica"
     )
     
-    # Campos de Cumplimiento
-    resuelto = models.BooleanField(default=False, verbose_name="¿Resuelto?")
-    resuelto_por = models.ForeignKey(
+    # Campos de Estado (Evolución)
+    estado = models.CharField(
+        max_length=20, 
+        choices=ESTADOS, 
+        default='pendiente', 
+        verbose_name="Estado Actual"
+    )
+    
+    # Auditoría del cambio de estado
+    actualizado_por = models.ForeignKey(
         User, 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True,
-        verbose_name="Resuelto por"
+        verbose_name="Actualizado por"
     )
-    fecha_resolucion = models.DateField(null=True, blank=True, verbose_name="Fecha de Resolución")
+    fecha_actualizacion = models.DateField(null=True, blank=True, verbose_name="Última Actualización")
 
     class Meta:
         verbose_name = "Observación de Campo"
@@ -559,4 +572,4 @@ class Observacion(models.Model):
         ordering = ['-fecha', 'zona']
 
     def __str__(self):
-        return f"{self.fecha} - {self.zona}: {self.nombre}"
+        return f"{self.fecha} - {self.zona}: {self.nombre} ({self.get_estado_display()})"

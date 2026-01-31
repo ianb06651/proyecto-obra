@@ -23,6 +23,7 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 
 INSTALLED_APPS = [
+    'cloudinary_storage',
     'actividades',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -30,6 +31,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    'cloudinary',
     
     # --- AÑADIDO (Paso 6.2) ---
     'rest_framework',
@@ -123,4 +126,18 @@ REST_FRAMEWORK = {
 }
 
 MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Configuración de Cloudinary
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
+}
+
+# Esto le dice a Django: "Para guardar archivos subidos (Media), usa Cloudinary"
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+# Mantenemos esto igual, Cloudinary lo usará internamente
+MEDIA_URL = '/media/' 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

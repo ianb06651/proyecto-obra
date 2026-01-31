@@ -40,50 +40,36 @@
         </div>
     </div>
 
-{# --- TABLA --- #}
+    {# --- TABLA --- #}
     <div class="card shadow-sm">
         <div class="card-body p-0">
-            {# --- INICIO DE LA CORRECCIÓN: Contenedor responsivo --- #}
-            <div class="table-responsive">
+            {# CAMBIO 1: Usamos 'table-responsive-lg' para que en PC el menú flote libremente sin scroll #}
+            <div class="table-responsive-lg" style="min-height: 200px;"> 
                 <table class="table table-hover mb-0 align-middle">
                     <thead class="table-dark">
                         <tr>
-                            {# 1. NÚM (Serial) #}
                             <th style="width: 5%; text-align: center;">Núm.</th>
-                            
-                            {# 2. ZONA #}
                             <th style="width: 15%;">Zona</th>
-                            
-                            {# 3. NOMBRE #}
                             <th style="width: 20%;">Nombre</th>
-                            
-                            {# 4. COMENTARIO #}
-                            <th style="width: 25%;">Comentario</th>
-                            
-                            {# 5. FECHA #}
+                            <th style="width: 25%;">Oportunidad/Detalle</th>
                             <th style="width: 10%;">Fecha</th>
-                            
-                            {# 6. ESTADO #}
-                            <th style="width: 15%; text-align: center;">Estado</th>
-                            
-                            {# 7. ACCIONES (Nuevo) #}
+                            <th style="width: 15%; text-align: center;">Estado </th>
                             <th style="width: 10%; text-align: center;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for obs in observaciones %}
-                            <tr class="{% if obs.resuelto %}table-success bg-opacity-10{% endif %}">
+                            <tr class="{% if obs.estado == 'resuelto' %}table-success bg-opacity-10{% endif %}">
                                 
-                                {# 1. Contador automático #}
+                                {# 1. Contador #}
                                 <td class="text-center fw-bold text-muted">{{ forloop.counter }}</td>
                                 
                                 {# 2. Zona #}
                                 <td><span class="badge bg-secondary">{{ obs.zona.nombre }}</span></td>
                                 
-                                {# 3. Nombre (Título) #}
+                                {# 3. Nombre y Foto #}
                                 <td class="fw-bold">
                                     {{ obs.nombre }}
-                                    {# Mostrar icono de foto si existe #}
                                     {% if obs.imagen %}
                                         <a href="{{ obs.imagen.url }}" target="_blank" class="text-decoration-none ms-1" title="Ver Foto">
                                             <i class="bi bi-image text-primary"></i>
@@ -94,29 +80,59 @@
                                 {# 4. Comentario #}
                                 <td class="text-muted small">{{ obs.comentario|linebreaksbr }}</td>
                                 
-                                {# 5. Fecha #}
+                                {# 5. Fecha Creación #}
                                 <td class="small">{{ obs.fecha|date:"d/m/Y" }}</td>
 
-                                {# 6. Estado #}
+                                {# 6. ESTADO CON DROPDOWN #}
                                 <td class="text-center">
-                                    {% if obs.resuelto %}
-                                        <div class="d-flex flex-column align-items-center">
-                                            <span class="badge bg-success mb-1">
-                                                <i class="bi bi-check-circle-fill"></i> Resuelto
-                                            </span>
-                                            <small class="text-muted" style="font-size: 0.75rem;">
-                                                {{ obs.resuelto_por.username|default:"Usuario" }} <br>
-                                                {{ obs.fecha_resolucion|date:"d/m" }}
-                                            </small>
+                                    <div class="dropdown">
+                                        {# CAMBIO 2: Agregado 'data-bs-boundary="viewport"' para mejor posicionamiento #}
+                                        <button class="btn btn-sm dropdown-toggle fw-bold
+                                            {% if obs.estado == 'pendiente' %}btn-outline-danger
+                                            {% elif obs.estado == 'proceso' %}btn-warning text-dark
+                                            {% elif obs.estado == 'resuelto' %}btn-success
+                                            {% endif %}" 
+                                            type="button" 
+                                            id="dropdownMenuButton{{ obs.id }}" 
+                                            data-bs-toggle="dropdown" 
+                                            data-bs-boundary="viewport"
+                                            aria-expanded="false">
+                                            
+                                            {% if obs.estado == 'pendiente' %}🔴 No Iniciado
+                                            {% elif obs.estado == 'proceso' %}🟡 En Progreso
+                                            {% elif obs.estado == 'resuelto' %}🟢 Resuelto
+                                            {% endif %}
+                                        </button>
+                                        
+                                        <ul class="dropdown-menu shadow" aria-labelledby="dropdownMenuButton{{ obs.id }}">
+                                            <li>
+                                                <a class="dropdown-item" href="{% url 'actividades:cambiar_estado_observacion' obs.id 'pendiente' %}">
+                                                    🔴 Marcar como <strong>No Iniciado</strong>
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" href="{% url 'actividades:cambiar_estado_observacion' obs.id 'proceso' %}">
+                                                    🟡 Marcar como <strong>En Progreso</strong>
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <a class="dropdown-item" href="{% url 'actividades:cambiar_estado_observacion' obs.id 'resuelto' %}">
+                                                    🟢 Marcar como <strong>Resuelto</strong>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    
+                                    {% if obs.actualizado_por %}
+                                        <div class="mt-1 text-muted" style="font-size: 0.7rem;">
+                                            <i class="bi bi-person-check"></i> {{ obs.actualizado_por.username }} <br>
+                                            {{ obs.fecha_actualizacion|date:"d/m" }}
                                         </div>
-                                    {% else %}
-                                        <a href="{% url 'actividades:marcar_observacion_resuelta' obs.id %}" class="btn btn-outline-success btn-sm fw-bold">
-                                            <i class="bi bi-check-lg"></i> Resolver
-                                        </a>
                                     {% endif %}
                                 </td>
 
-                                {# 7. Acciones (Borrar) #}
+                                {# 7. Eliminar #}
                                 <td class="text-center">
                                     {% if user.is_authenticated %}
                                         <a href="{% url 'actividades:eliminar_observacion' obs.id %}" class="btn btn-sm btn-outline-danger" title="Eliminar Observación">
@@ -128,14 +144,13 @@
                         {% empty %}
                             <tr>
                                 <td colspan="7" class="text-center py-5 text-muted">
-                                    No hay observaciones pendientes.
+                                    No hay observaciones registradas con estos filtros.
                                 </td>
                             </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            {# --- FIN DE LA CORRECCIÓN --- #}
         </div>
     </div>
 </div>

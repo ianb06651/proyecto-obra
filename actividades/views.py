@@ -798,24 +798,6 @@ def crear_observacion(request):
     return render(request, 'actividades/observacion_form.html', {'form': form})
 
 @login_required
-def marcar_observacion_resuelta(request, pk):
-    obs = get_object_or_404(Observacion, pk=pk)
-    if not obs.resuelto:
-        obs.resuelto = True
-        obs.resuelto_por = request.user
-        obs.fecha_resolucion = date.today()
-        messages.success(request, "Resuelta.")
-    else:
-        obs.resuelto = False
-        obs.resuelto_por = None
-        obs.fecha_resolucion = None
-        messages.warning(request, "Reabierta.")
-    obs.save()
-    # Redirigir a donde estaba el usuario
-    next_url = request.META.get('HTTP_REFERER', 'actividades:lista_observaciones')
-    return redirect(next_url)
-
-@login_required
 def eliminar_observacion(request, pk):
     obs = get_object_or_404(Observacion, pk=pk)
     if request.method == 'POST':
@@ -823,3 +805,26 @@ def eliminar_observacion(request, pk):
         messages.success(request, "Eliminada.")
         return redirect('actividades:lista_observaciones')
     return render(request, 'actividades/observacion_confirmar_borrado.html', {'observacion': obs})
+
+@login_required
+def cambiar_estado_observacion(request, pk, nuevo_estado):
+    observacion = get_object_or_404(Observacion, pk=pk)
+    
+    # Validamos que el estado que llega por URL sea uno de los permitidos
+    estados_validos = dict(Observacion.ESTADOS).keys()
+    
+    if nuevo_estado not in estados_validos:
+        messages.error(request, "Estado no válido.")
+        # CORRECCIÓN AQUÍ: Agregamos 'actividades:' antes del nombre
+        return redirect('actividades:lista_observaciones')
+    
+    # Actualizamos los datos
+    observacion.estado = nuevo_estado
+    observacion.actualizado_por = request.user
+    observacion.fecha_actualizacion = date.today()
+    observacion.save()
+    
+    messages.success(request, f"Estado actualizado a: {observacion.get_estado_display()}")
+    
+    # CORRECCIÓN AQUÍ TAMBIÉN:
+    return redirect('actividades:lista_observaciones')

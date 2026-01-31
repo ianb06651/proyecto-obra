@@ -8,7 +8,7 @@ from .models import (
     ReporteDiarioMaquinaria, ReporteClima, Proyecto,
     MetaPorZona, AvancePorZona, TipoElemento, ProcesoConstructivo, PasoProcesoTipoElemento,
     ElementoConstructivo, AvanceProcesoElemento,
-    ElementoBIM_GUID, Cronograma, Observacion, CronogramaPorZona  # <--- Agregamos CronogramaPorZona
+    ElementoBIM_GUID, Cronograma, Observacion, CronogramaPorZona
 )
 
 # --- Registros de Catálogos ---
@@ -116,7 +116,6 @@ class PasoProcesoTipoElementoAdmin(admin.ModelAdmin):
     autocomplete_fields = ['tipo_elemento', 'proceso']
     list_editable = ('orden',)
 
-# --- 2. NUEVO INLINE ---
 class ElementoBIM_GUID_Inline(admin.TabularInline):
     model = ElementoBIM_GUID
     extra = 1 
@@ -124,7 +123,6 @@ class ElementoBIM_GUID_Inline(admin.TabularInline):
     verbose_name = "GUID de BIM"
     verbose_name_plural = "GUIDs de BIM (Navisworks/Revit)"
 
-# --- 3. MODIFICAR ElementoConstructivoAdmin ---
 @admin.register(ElementoConstructivo)
 class ElementoConstructivoAdmin(admin.ModelAdmin):
     list_display = ('identificador_unico', 'tipo_elemento', 'descripcion')
@@ -152,21 +150,11 @@ class ElementoBIM_GUID_Admin(admin.ModelAdmin):
 
 @admin.register(Cronograma)
 class CronogramaAdmin(admin.ModelAdmin):
-    # Ya no mostramos fechas aquí porque no existen en este modelo
     list_display = ('nombre', 'padre', 'proyecto')
-    
-    # Filtros laterales
     list_filter = ('proyecto', 'padre') 
-    
-    # Buscador
     search_fields = ('nombre',)
-    
-    # Ordenar por jerarquía
     ordering = ('padre',)
-    
     autocomplete_fields = ['padre'] 
-    
-    # Mostramos las zonas asociadas y sus fechas como una tabla interna
     inlines = [CronogramaPorZonaInline]
 
 @admin.register(CronogramaPorZona)
@@ -174,11 +162,13 @@ class CronogramaPorZonaAdmin(admin.ModelAdmin):
     list_display = ('tarea', 'zona', 'fecha_inicio_prog', 'fecha_fin_prog', 'estado_calculado')
     list_filter = ('zona', 'tarea__proyecto')
     search_fields = ('tarea__nombre', 'zona__nombre')
-    list_editable = ('fecha_inicio_prog', 'fecha_fin_prog') # Permite editar fechas rápido desde el listado
+    list_editable = ('fecha_inicio_prog', 'fecha_fin_prog')
 
+# --- AQUÍ ESTÁ LA CORRECCIÓN CLAVE ---
 @admin.register(Observacion)
 class ObservacionAdmin(admin.ModelAdmin):
-    list_display = ('fecha', 'zona', 'nombre', 'resuelto', 'fecha_resolucion')
-    list_filter = ('zona', 'resuelto', 'fecha')
+    # Cambiamos 'resuelto' por 'estado' y 'fecha_resolucion' por 'fecha_actualizacion'
+    list_display = ('fecha', 'zona', 'nombre', 'estado', 'fecha_actualizacion')
+    list_filter = ('zona', 'estado', 'fecha')
     search_fields = ('nombre', 'comentario')
     date_hierarchy = 'fecha'

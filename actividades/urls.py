@@ -57,9 +57,12 @@ urlpatterns = [
     path('api/cronograma/hijos/<int:padre_id>/', views.api_hijos_cronograma, name='api_hijos_cronograma'),
     path('api/cronograma/detalle/<int:tarea_id>/', views.api_detalle_tarea, name='api_detalle_tarea'),
 
-    # --- NUEVAS URLs: OBSERVACIONES ---
+# --- OBSERVACIONES ---
     path('observaciones/', views.lista_observaciones, name='lista_observaciones'),
-    path('observaciones/nueva/', views.crear_observacion, name='crear_observacion'),
-    path('observaciones/resolver/<int:pk>/', views.marcar_observacion_resuelta, name='marcar_observacion_resuelta'),
+    path('observaciones/crear/', views.crear_observacion, name='crear_observacion'),
     path('observaciones/eliminar/<int:pk>/', views.eliminar_observacion, name='eliminar_observacion'),
+    
+    # NUEVA RUTA: Cambiar estado (acepta 'pendiente', 'proceso', 'resuelto')
+    path('observaciones/estado/<int:pk>/<str:nuevo_estado>/', views.cambiar_estado_observacion, name='cambiar_estado_observacion'),
+    
 ]

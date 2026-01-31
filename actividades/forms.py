@@ -206,7 +206,6 @@ class CronogramaForm(forms.ModelForm):
     """
     Formulario para CREAR una nueva actividad MAESTRA.
     """
-    # Campo manual para seleccionar múltiples zonas al crear
     zonas_aplicables = forms.ModelMultipleChoiceField(
         queryset=AreaDeTrabajo.objects.all(),
         widget=forms.CheckboxSelectMultiple(attrs={'class': 'list-unstyled mb-0'}),
@@ -216,19 +215,23 @@ class CronogramaForm(forms.ModelForm):
 
     class Meta:
         model = Cronograma
-        fields = ['nombre', 'padre', 'proyecto'] # Solo campos reales de Cronograma
+        # 1. IMPORTANTE: Solo incluimos nombre y padre. 'proyecto' queda fuera.
+        fields = ['nombre', 'padre']  
         widgets = {
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Nombre de la Actividad'}),
             'padre': forms.Select(attrs={'class': 'form-select'}),
-            'proyecto': forms.HiddenInput(),
         }
 
     def __init__(self, *args, **kwargs):
+        # Extraemos el proyecto que envía la vista
         proyecto = kwargs.pop('proyecto', None)
         super().__init__(*args, **kwargs)
         
         if proyecto:
-            self.fields['proyecto'].initial = proyecto
+            # 2. IMPORTANTE: Eliminamos la línea "self.fields['proyecto'].initial = ..."
+            #    porque el campo ya no existe en 'fields'.
+
+            # Filtramos el padre para que solo muestre tareas de ESTE proyecto
             self.fields['padre'].queryset = Cronograma.objects.filter(
                 proyecto=proyecto
             ).filter(
@@ -237,8 +240,6 @@ class CronogramaForm(forms.ModelForm):
             
             self.fields['padre'].label_from_instance = lambda obj: f"{'📂 ' + obj.nombre if obj.padre is None else '↳ ' + obj.nombre}"
             self.fields['padre'].empty_label = "--- Sin Padre (Crear Nivel 1) ---"
-
-# En actividades/forms.py
 
 class CronogramaPorZonaForm(forms.ModelForm):
     """
@@ -272,19 +273,17 @@ class CronogramaPorZonaForm(forms.ModelForm):
 # OBSERVACIONES
 # ==========================================
 
+# actividades/forms.py (Solo actualiza esta clase)
+
 class ObservacionForm(forms.ModelForm):
     class Meta:
         model = Observacion
+        # Quitamos 'estado', 'actualizado_por' y 'fecha_actualizacion' para que se manejen internamente
         fields = ['fecha', 'zona', 'nombre', 'comentario', 'imagen']
         widgets = {
             'fecha': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'zona': forms.Select(attrs={'class': 'form-select'}),
-            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Título'}),
-            'comentario': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-            'imagen': forms.ClearableFileInput(attrs={'class': 'form-control'}),
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Título breve del hallazgo'}),
+            'comentario': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Descripción detallada...'}),
+            'imagen': forms.FileInput(attrs={'class': 'form-control'}),
         }
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.instance.pk and 'fecha' in self.fields:
-            self.fields['fecha'].initial = date.today()
