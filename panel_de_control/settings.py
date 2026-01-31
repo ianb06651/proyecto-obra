@@ -6,9 +6,10 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ... (configuraciones existentes: SECRET_KEY, DEBUG, ALLOWED_HOSTS) ...
+# --- CONFIGURACIÓN DE SEGURIDAD ---
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-una-clave-local-cualquiera')
 
+# Detectar si estamos en Render
 IS_RENDER = os.environ.get('RENDER') == 'true'
 
 if IS_RENDER:
@@ -21,10 +22,10 @@ RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
-
+# --- APLICACIONES INSTALADAS ---
 INSTALLED_APPS = [
-    'cloudinary_storage',
-    'actividades',
+    # Apps de terceros
+    'cloudinary_storage',  # Debe ir antes de django.contrib.staticfiles si usaras gestión estática de cloudinary, pero está bien aquí
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -32,23 +33,22 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    'cloudinary',
-    
-    # --- AÑADIDO (Paso 6.2) ---
+    'cloudinary', # Librería principal de Cloudinary
     'rest_framework',
     'rest_framework.authtoken',
-    # --- FIN AÑADIDO ---
+    
+    # Mis apps
+    'actividades',
 ]
 
-# ... (configuraciones existentes: MIDDLEWARE, ROOT_URLCONF, TEMPLATES, WSGI_APPLICATION, DATABASES, AUTH_PASSWORD_VALIDATORS) ...
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # Middleware para archivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware', # <-- El Middleware está correcto aquí
+    'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -72,6 +72,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'panel_de_control.wsgi.application'
 
+# --- BASE DE DATOS ---
 if IS_RENDER:
     DATABASES = {
         'default': dj_database_url.config(conn_max_age=600, ssl_require=True)
@@ -81,13 +82,13 @@ else:
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': os.environ.get('DB_NAME', 'huamantla_cedis_registros_2'),
-            'USER': os.environ.get('DB_USER', 'iandvb'),
-            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'USER': os.environ.get('DB_USER', 'postgres'), # Ajusta esto a tu usuario local si es diferente
+            'PASSWORD': os.environ.get('DB_PASSWORD', 'password'), # Ajusta si tienes contraseña
             'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),
         }
     }
-    
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -95,49 +96,51 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+# --- INTERNACIONALIZACIÓN ---
 LANGUAGE_CODE = 'es-mx'
 TIME_ZONE = 'America/Mexico_City'
 USE_I18N = True
 USE_TZ = True
 
+# --- ARCHIVOS ESTÁTICOS (CSS, JS, IMAGES) ---
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-LOGIN_URL = '/admin/login/'
-
-WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY')
-
-# --- AÑADIDO (Paso 6.2) ---
-# Configuración de Django REST Framework para usar autenticación por Token
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        # Se prioriza TokenAuthentication para las APIs
-        'rest_framework.authentication.TokenAuthentication',
-        # SessionAuthentication se mantiene para la API navegable (opcional)
-        'rest_framework.authentication.SessionAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        # Política global: solo usuarios autenticados pueden acceder a las APIs
-        'rest_framework.permissions.IsAuthenticated',
-    ]
-}
-
+# --- CONFIGURACIÓN DE MEDIOS (ARCHIVOS SUBIDOS) ---
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Configuración de Cloudinary
+# Credenciales de Cloudinary (Leídas desde variables de entorno)
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
     'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
     'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
 }
 
-# Esto le dice a Django: "Para guardar archivos subidos (Media), usa Cloudinary"
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+# --- NUEVA CONFIGURACIÓN DE ALMACENAMIENTO (DJANGO 5+) ---
+# Esto reemplaza a DEFAULT_FILE_STORAGE y STATICFILES_STORAGE
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
-# Mantenemos esto igual, Cloudinary lo usará internamente
-MEDIA_URL = '/media/' 
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# --- OTRAS CONFIGURACIONES ---
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+LOGIN_URL = '/admin/login/'
+WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY')
+
+# Configuración de Django REST Framework
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
