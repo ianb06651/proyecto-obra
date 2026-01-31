@@ -119,7 +119,7 @@ CLOUDINARY_STORAGE = {
 }
 
 # --- NUEVA CONFIGURACIÓN DE ALMACENAMIENTO (DJANGO 5+) ---
-# Esto reemplaza a DEFAULT_FILE_STORAGE y STATICFILES_STORAGE
+# ... (Tu bloque STORAGES que ya pusiste) ...
 STORAGES = {
     "default": {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
@@ -128,6 +128,9 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 # --- OTRAS CONFIGURACIONES ---
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
