@@ -118,8 +118,7 @@ CLOUDINARY_STORAGE = {
     'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
 }
 
-# --- NUEVA CONFIGURACIÓN DE ALMACENAMIENTO (DJANGO 5+) ---
-# ... (Tu bloque STORAGES que ya pusiste) ...
+# PEGA ESTO EXACTAMENTE ASÍ
 STORAGES = {
     "default": {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
@@ -129,6 +128,7 @@ STORAGES = {
     },
 }
 
+# ALIAS DE COMPATIBILIDAD (Para que no fallen otras librerías)
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
