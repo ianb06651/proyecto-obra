@@ -6,9 +6,12 @@ import sys
 
 def main():
     try:
-       from dotenv import load_dotenv
+        from dotenv import load_dotenv
+        # Fuerza la búsqueda del archivo .env en la misma carpeta que manage.py
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        load_dotenv(dotenv_path=env_path)
     except ImportError:
-       pass # No es necesario en producción si las variables ya están configuradas
+        pass
     else:
        load_dotenv()
        
