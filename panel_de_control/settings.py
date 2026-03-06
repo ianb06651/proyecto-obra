@@ -28,14 +28,19 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 # --- APLICACIONES INSTALADAS ---
 INSTALLED_APPS = [
-    'cloudinary_storage',  # DEBE IR PRIMERO para interceptar el manejo de archivos
-    'cloudinary',
+    # 1. Aplicaciones base de Django primero
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # 2. Cloudinary (para archivos Media)
+    'cloudinary_storage',  
+    'cloudinary',
+
+    # 3. Librerías de terceros y tus apps
     'rest_framework',
     'rest_framework.authtoken',
     'actividades',
