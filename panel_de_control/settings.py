@@ -120,6 +120,9 @@ STORAGES = {
     },
 }
 
+# Variable legacy agregada para evitar el error con django-cloudinary-storage
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+
 # --- INTERNACIONALIZACIÓN ---
 LANGUAGE_CODE = 'es-mx'
 TIME_ZONE = 'America/Mexico_City'
