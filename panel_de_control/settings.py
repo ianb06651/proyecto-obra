@@ -115,13 +115,10 @@ STORAGES = {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-        "OPTIONS": {
-            "manifest_strict": False,  # <--- Forma correcta en Django 4.2+
-        }
+        # Usamos la versión sin "Manifest" para evitar el escaneo estricto de los CSS
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
-
 
 # --- INTERNACIONALIZACIÓN ---
 LANGUAGE_CODE = 'es-mx'
