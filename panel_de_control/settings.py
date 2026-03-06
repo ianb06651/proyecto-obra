@@ -90,7 +90,6 @@ else:
     }
 
 # --- CONFIGURACIÓN DE CLOUDINARY ---
-# Definir variables primero para evitar que sean None
 CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
 CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY')
 CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
@@ -101,13 +100,14 @@ CLOUDINARY_STORAGE = {
     'API_SECRET': CLOUDINARY_API_SECRET,
 }
 
-# Configuración explícita de la SDK
-cloudinary.config(
-    cloud_name=CLOUDINARY_CLOUD_NAME,
-    api_key=CLOUDINARY_API_KEY,
-    api_secret=CLOUDINARY_API_SECRET,
-    secure=True
-)
+# Protegemos la configuración: si es None durante el build de Render, no crashea
+if CLOUDINARY_CLOUD_NAME:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True
+    )
 
 # --- ALMACENAMIENTO (STORAGES) ---
 STORAGES = {
@@ -116,14 +116,12 @@ STORAGES = {
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "OPTIONS": {
+            "manifest_strict": False,  # <--- Forma correcta en Django 4.2+
+        }
     },
 }
 
-# Compatibilidad con versiones anteriores
-DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
-WHITENOISE_MANIFEST_STRICT = False
 
 # --- INTERNACIONALIZACIÓN ---
 LANGUAGE_CODE = 'es-mx'
