@@ -158,3 +158,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
+# Agrega esto al final de settings.py solo para probar
+print("--- DEBUG CLOUDINARY ---")
+print(f"Cloud Name: {CLOUDINARY_CLOUD_NAME}")
+print(f"API Key: {CLOUDINARY_API_KEY}")
+print("------------------------")

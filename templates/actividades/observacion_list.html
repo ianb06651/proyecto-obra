@@ -71,9 +71,11 @@
                                 <td class="fw-bold">
                                     {{ obs.nombre }}
                                     {% if obs.imagen %}
-                                        <a href="{{ obs.imagen.url }}" target="_blank" class="text-decoration-none ms-1" title="Ver Foto">
-                                            <i class="bi bi-image text-primary"></i>
-                                        </a>
+                                        <div class="mt-2">
+                                            <a href="{{ obs.imagen.url }}" target="_blank" title="Ver Foto Completa">
+                                                <img src="{{ obs.imagen.url }}" alt="Evidencia" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 2px solid #dee2e6; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                            </a>
+                                        </div>
                                     {% endif %}
                                 </td>
                                 
@@ -132,12 +134,17 @@
                                     {% endif %}
                                 </td>
 
-                                {# 7. Eliminar #}
+                                {# 7. Acciones #}
                                 <td class="text-center">
                                     {% if user.is_authenticated %}
-                                        <a href="{% url 'actividades:eliminar_observacion' obs.id %}" class="btn btn-sm btn-outline-danger" title="Eliminar Observación">
-                                            <i class="bi bi-trash"></i>
-                                        </a>
+                                        <div class="d-flex justify-content-center gap-1">
+                                            <a href="{% url 'actividades:editar_observacion' obs.id %}" class="btn btn-sm btn-outline-warning" title="Editar Observación">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </a>
+                                            <a href="{% url 'actividades:eliminar_observacion' obs.id %}" class="btn btn-sm btn-outline-danger" title="Eliminar Observación">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        </div>
                                     {% endif %}
                                 </td>
                             </tr>

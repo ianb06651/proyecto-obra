@@ -60,6 +60,7 @@ urlpatterns = [
 # --- OBSERVACIONES ---
     path('observaciones/', views.lista_observaciones, name='lista_observaciones'),
     path('observaciones/crear/', views.crear_observacion, name='crear_observacion'),
+    path('observaciones/editar/<int:pk>/', views.editar_observacion, name='editar_observacion'),
     path('observaciones/eliminar/<int:pk>/', views.eliminar_observacion, name='eliminar_observacion'),
     
     # NUEVA RUTA: Cambiar estado (acepta 'pendiente', 'proceso', 'resuelto')

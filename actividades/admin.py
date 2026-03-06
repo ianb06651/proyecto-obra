@@ -1,6 +1,7 @@
 # actividades/admin.py
 
 from django.contrib import admin
+from django.utils.html import format_html  # <-- Añadido para mostrar las imágenes
 from .models import (
     Empresa, Cargo, AreaDeTrabajo, Semana,
     PartidaActividad, PartidaPersonal,
@@ -10,6 +11,11 @@ from .models import (
     ElementoConstructivo, AvanceProcesoElemento,
     ElementoBIM_GUID, Cronograma, Observacion, CronogramaPorZona
 )
+
+# --- PERSONALIZACIÓN GENERAL DEL ADMIN ---
+admin.site.site_header = "Panel de Control de Obra (DIPRO)"
+admin.site.site_title = "Admin de Obra"
+admin.site.index_title = "Gestión Central de la Obra"
 
 # --- Registros de Catálogos ---
 admin.site.register(Empresa)
@@ -164,11 +170,39 @@ class CronogramaPorZonaAdmin(admin.ModelAdmin):
     search_fields = ('tarea__nombre', 'zona__nombre')
     list_editable = ('fecha_inicio_prog', 'fecha_fin_prog')
 
-# --- AQUÍ ESTÁ LA CORRECCIÓN CLAVE ---
+# --- AQUÍ ESTÁ LA MEJORA PARA OBSERVACIONES ---
 @admin.register(Observacion)
 class ObservacionAdmin(admin.ModelAdmin):
-    # Cambiamos 'resuelto' por 'estado' y 'fecha_resolucion' por 'fecha_actualizacion'
-    list_display = ('fecha', 'zona', 'nombre', 'estado', 'fecha_actualizacion')
+    list_display = ('fecha', 'zona', 'nombre', 'estado', 'mostrar_miniatura', 'fecha_actualizacion')
     list_filter = ('zona', 'estado', 'fecha')
     search_fields = ('nombre', 'comentario')
     date_hierarchy = 'fecha'
+    list_editable = ('estado',)  # Permite cambiar el estado directamente desde la lista
+    readonly_fields = ('mostrar_imagen_grande', 'fecha_actualizacion')
+    
+    # Agrupamos los campos para que no se vea como una lista aburrida
+    fieldsets = (
+        ('Información Principal', {
+            'fields': ('fecha', 'zona', 'nombre', 'comentario')
+        }),
+        ('Evidencia Fotográfica', {
+            'fields': ('imagen', 'mostrar_imagen_grande'),
+            'classes': ('collapse',), # Lo hace colapsable
+        }),
+        ('Seguimiento', {
+            'fields': ('estado', 'actualizado_por', 'fecha_actualizacion')
+        }),
+    )
+
+    # Funciones para visualizar las imágenes reales en el Admin
+    def mostrar_miniatura(self, obj):
+        if obj.imagen:
+            return format_html('<a href="{}" target="_blank"><img src="{}" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px;" /></a>', obj.imagen.url, obj.imagen.url)
+        return "Sin Foto"
+    mostrar_miniatura.short_description = "Evidencia"
+
+    def mostrar_imagen_grande(self, obj):
+        if obj.imagen:
+            return format_html('<a href="{}" target="_blank"><img src="{}" style="max-width: 400px; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" /></a>', obj.imagen.url, obj.imagen.url)
+        return "Sube una imagen primero"
+    mostrar_imagen_grande.short_description = "Vista Previa"

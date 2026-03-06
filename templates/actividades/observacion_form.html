@@ -1,14 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Nueva Observación{% endblock %}
+{% block title %}
+    {% if form.instance.pk %}Editar Observación{% else %}Nueva Observación{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="card col-12 col-md-8 col-lg-6 mx-auto mt-4 shadow">
     <div class="card-header bg-danger text-white">
-        <h5 class="mb-0"><i class="bi bi-camera-fill"></i> Registrar Observación con Foto</h5>
+        <h5 class="mb-0">
+            <i class="bi bi-camera-fill"></i> 
+            {% if form.instance.pk %}Editar Observación{% else %}Registrar Observación con Foto{% endif %}
+        </h5>
     </div>
     <div class="card-body">
-        <p class="text-muted small">Registra una incidencia. Puedes adjuntar una foto desde tu cámara.</p>
+        <p class="text-muted small">Registra o edita la incidencia.</p>
         
         {# ¡OJO! EL ENCTYPE ES CRUCIAL PARA SUBIR ARCHIVOS #}
         <form method="post" enctype="multipart/form-data">
@@ -31,6 +36,11 @@
 
             <div class="mb-3">
                 <label class="form-label fw-bold">Evidencia (Foto)</label>
+                {% if form.instance.imagen %}
+                    <div class="mb-2">
+                        <img src="{{ form.instance.imagen.url }}" style="max-height: 150px; border-radius: 8px;">
+                    </div>
+                {% endif %}
                 {{ form.imagen }}
                 <div class="form-text">Toca aquí para abrir la cámara o galería.</div>
             </div>
@@ -43,7 +53,9 @@
             <hr>
             <div class="d-flex justify-content-end gap-2">
                 <a href="{% url 'actividades:lista_observaciones' %}" class="btn btn-secondary">Cancelar</a>
-                <button type="submit" class="btn btn-danger">Guardar Observación</button>
+                <button type="submit" class="btn btn-danger">
+                    {% if form.instance.pk %}Guardar Cambios{% else %}Guardar Observación{% endif %}
+                </button>
             </div>
         </form>
     </div>

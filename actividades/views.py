@@ -798,6 +798,22 @@ def crear_observacion(request):
     return render(request, 'actividades/observacion_form.html', {'form': form})
 
 @login_required
+def editar_observacion(request, pk):
+    observacion = get_object_or_404(Observacion, pk=pk)
+    # Importante: Pasar request.FILES para que acepte cambios en la imagen
+    form = ObservacionForm(request.POST or None, request.FILES or None, instance=observacion)
+    
+    if request.method == 'POST' and form.is_valid():
+        try:
+            form.save()
+            messages.success(request, "Observación actualizada correctamente.")
+            return redirect('actividades:lista_observaciones')
+        except IntegrityError:
+            messages.error(request, "Error: Ya existe una observación con esos datos.")
+            
+    return render(request, 'actividades/observacion_form.html', {'form': form})
+
+@login_required
 def eliminar_observacion(request, pk):
     obs = get_object_or_404(Observacion, pk=pk)
     if request.method == 'POST':
